@@ -12,6 +12,8 @@
   `README.md`
 - **Git write operations performed by the agent:** none
 - **Phase 01 status:** PASS — local and container exit gates verified
+- **Remote CI status:** FAILED / FIX PENDING — attempt 1 frontend passed; backend readiness test
+  exposed a Linux connection-refusal translation defect; local fix verified but not pushed/rerun
 - **Phase 02 readiness:** NOT AUTHORIZED; do not begin Task 1 business logic
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
@@ -204,7 +206,7 @@ No README command correction was required.
 
 - Independent verifier result: **PASS_WITH_CHANGES**
 - Critical findings: **none**
-- Remote CI: **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED**
+- Remote CI at that verification point: **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED**
 - Fresh-clone Behavior 6: **NOT_STARTED**
 
 Minimal corrections applied:
@@ -245,6 +247,66 @@ Correction verification:
 - `docker compose down` — PASS; containers/network removed and persistent volume retained
 - final `docker compose ps --all` — PASS; no project containers remained
 - `git diff --check` — PASS
+
+### Remote GitHub CI attempt 1 — backend failure — 2026-08-19
+
+- Frontend CI: **PASS**
+- Backend CI: **FAIL**
+- Backend steps before pytest: checkout, uv setup, Python 3.13.14, frozen sync, migration, Ruff
+  format/lint, and mypy all **PASS**
+- Backend pytest: 7 passed, 1 failed
+- Backend coverage: 94.90%; the 90% threshold was reached
+- Failing test:
+  `tests/test_api.py::test_ready_returns_actionable_safe_failure_when_database_is_unavailable`
+- Failure: Linux/GitHub Actions surfaced `ConnectionRefusedError: [Errno 111] Connect call failed
+  ('127.0.0.1', 1)` from the intentional unavailable-database readiness check.
+
+Root cause:
+
+- asyncpg's connection loop catches each `OSError`, retains it as `last_error`, and re-raises that
+  OS error when no address connects.
+- Linux rejects the loopback port immediately with `ConnectionRefusedError`, which inherits from
+  `OSError`/`ConnectionError` but not `SQLAlchemyError`.
+- SQLAlchemy's asyncpg connection path allowed that pre-connection OS error to propagate unchanged.
+- `check_dependencies` translated only `TimeoutError` and `SQLAlchemyError`. The Windows test had
+  reached the bounded timeout path, so local verification did not expose the missing Linux
+  classification.
+
+Minimal fix:
+
+- Translate `OSError` alongside `SQLAlchemyError` at the database dependency boundary.
+- Retain the separate bounded `TimeoutError` response.
+- Do not catch blanket `Exception`; programming errors continue to propagate.
+- Continue returning only controlled cause/remedy text without raw driver details or credentials.
+
+Focused test changes:
+
+- Retained the real unreachable-port API test and strengthened it to reject the complete database
+  URL, password, exception class, and raw connection-refusal text.
+- Added direct connection-refusal translation coverage.
+- Added timeout translation coverage.
+- Added a test proving an unexpected `ValueError` is not swallowed.
+- Retained the real PostgreSQL/pgvector readiness integration test.
+
+Local fix verification:
+
+- `uv run ruff format --check .` — PASS; 10 files formatted
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; no issues in 8 source files
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 10 passed, 1 integration test skipped
+  without `TEST_DATABASE_URL`, 100% coverage
+- `uv build` — PASS; source distribution and wheel built
+- `docker compose config` — PASS
+- `docker compose up --build --detach` — PASS
+- `docker compose ps` — PASS; database, backend, and frontend all healthy
+- `/health`, `/ready`, and `/version` — PASS
+- `docker compose exec backend alembic current` — PASS; `20260819_0001 (head)`
+- real `tests/test_readiness_integration.py` against the Compose database — PASS; 1 passed
+- `docker compose down` — PASS
+- `git diff --check` — PASS
+
+Remote CI status: **FAILED / FIX PENDING** until the candidate pushes this fix and GitHub Actions
+reruns successfully. Attempt 1 remains recorded and is not reclassified as PASS.
 
 ### Failures encountered and fixes
 
@@ -303,8 +365,8 @@ Correction verification:
 - Local database credentials are intentionally low-sensitivity defaults and must be changed for
   any non-local environment.
 - Runtime containers currently run with image-default users; non-root hardening is deferred.
-- Remote CI remains **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED**. It cannot execute until the
-  candidate pushes the branch and triggers GitHub CI.
+- Remote CI attempt 1 is **FAILED / FIX PENDING**. Frontend passed; the backend Linux readiness
+  defect is fixed and locally verified but requires a candidate push and successful GitHub rerun.
 - Major-version GitHub Action references are used; immutable action SHA pinning is not yet applied.
 - Docker image tags are version-pinned, while registry content trust/signature enforcement is not
   configured.
@@ -313,10 +375,11 @@ Correction verification:
 
 ### Phase 01 conclusion
 
-Phase 01 exit gate: **PASS** after applying and verifying the independent verifier's
+Phase 01 local/container exit gate: **PASS** after applying and verifying the independent verifier's
 `PASS_WITH_CHANGES` corrections, with zero critical findings. This status includes the
 candidate-side formatting failure and remains PASS only because canonical formatting was applied
-and the full affected frontend gate passed on rerun. Remote CI remains unverified, fresh-clone
+and the full affected frontend gate passed on rerun. Remote CI attempt 1 is
+**FAILED / FIX PENDING** until the locally verified backend fix is pushed and rerun; fresh-clone
 Behavior 6 remains `NOT_STARTED`, and Phase 02 must not begin without separate candidate
 authorization.
 
@@ -564,8 +627,8 @@ Never cut the five explicit floor behaviors: visible path-changing stages, durab
 - No hosted deployment is promised.
 - No internet-facing authentication, authorization, TLS termination, non-root container hardening,
   image signature enforcement, or production deployment is implemented.
-- Remote CI is **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED** because Git write/push operations
-  remain candidate-owned.
+- Remote CI attempt 1 is **FAILED / FIX PENDING**; frontend passed, while the backend fix remains
+  candidate-controlled and has not yet been pushed/rerun.
 - SuperDocs familiarization and documentation prerequisites are complete by manual candidate confirmation; no repository artifact or runtime proof is claimed.
 
 ## Phase 01 entry criteria
@@ -619,5 +682,6 @@ Only the Phase 01 foundation capabilities listed in this record are implemented.
 
 ## Next safe step
 
-The candidate reviews the corrected uncommitted diff, performs Git writes personally, and observes
-GitHub CI. Do not begin Phase 02 or Task 1 business logic without separate explicit authorization.
+The candidate reviews the focused backend fix, performs Git writes personally, and reruns GitHub
+CI. Remote status remains **FAILED / FIX PENDING** until the backend job passes. Do not begin Phase
+02 or Task 1 business logic without separate explicit authorization.

@@ -56,7 +56,7 @@ async def check_dependencies(engine: AsyncEngine, timeout_seconds: float) -> Rea
             detail="Database readiness check timed out.",
             action="Verify PostgreSQL is running and DATABASE_URL is reachable.",
         )
-    except SQLAlchemyError:
+    except (OSError, SQLAlchemyError):
         return _database_unavailable(
             detail="PostgreSQL connection failed.",
             action="Verify PostgreSQL is running, credentials are valid, and migrations completed.",

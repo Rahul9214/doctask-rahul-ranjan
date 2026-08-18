@@ -47,8 +47,9 @@ def test_ready_reports_successful_dependencies() -> None:
 
 def test_ready_returns_actionable_safe_failure_when_database_is_unavailable() -> None:
     secret = "must-not-appear"
+    database_url = f"postgresql+asyncpg://foundation:{secret}@127.0.0.1:1/unreachable"
     settings = Settings(
-        database_url=SecretStr(f"postgresql+asyncpg://foundation:{secret}@127.0.0.1:1/unreachable"),
+        database_url=SecretStr(database_url),
         readiness_timeout_seconds=0.5,
     )
 
@@ -59,8 +60,12 @@ def test_ready_returns_actionable_safe_failure_when_database_is_unavailable() ->
     assert response.status_code == 503
     assert body["status"] == "unavailable"
     assert body["checks"]["database"]["status"] == "unavailable"
+    assert body["checks"]["database"]["detail"]
     assert body["checks"]["database"]["action"]
     assert secret not in response.text
+    assert database_url not in response.text
+    assert "ConnectionRefusedError" not in response.text
+    assert "Connect call failed" not in response.text
 
 
 def test_version_is_truthful_about_phase_scope() -> None:
