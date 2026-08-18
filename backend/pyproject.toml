@@ -1,0 +1,63 @@
+[project]
+name = "project-assurance-foundation"
+version = "0.1.0"
+description = "Phase 01 development foundation for the Project Assurance Register"
+requires-python = "==3.13.*"
+dependencies = [
+    "alembic==1.19.1",
+    "asyncpg==0.31.0",
+    "fastapi==0.141.1",
+    "langgraph==1.2.11",
+    "langgraph-checkpoint-postgres==3.1.2",
+    "mcp==2.0.0",
+    "pgvector==0.5.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+    "sqlalchemy==2.0.52",
+    "uvicorn[standard]==0.52.3",
+]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.3",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["ASYNC", "B", "E", "F", "I", "SIM", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+asyncio_mode = "auto"
+markers = [
+    "integration: requires a reachable PostgreSQL database with pgvector",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true

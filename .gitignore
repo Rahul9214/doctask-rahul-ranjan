@@ -1,0 +1,45 @@
+# Secrets and local environment overrides
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node and frontend output
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.tsbuildinfo
+
+# Local database and runtime files
+*.db
+*.sqlite
+*.sqlite3
+postgres-data/
+tmp/
+
+# IDE and OS caches
+.idea/
+.vscode/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*

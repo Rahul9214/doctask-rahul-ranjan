@@ -2,9 +2,13 @@
 
 ## Status
 
-**Planned, not implemented.**
+**Phase 01 foundation implemented; Task 1 business architecture remains planned.**
 
-This document records the minimum architecture proposed for Task 1. No component, schema, graph, adapter, test, deployment, or runtime behavior described below exists yet. Implementation evidence may simplify or revise the design; any revision must be recorded in `PROGRESS.md`.
+The executable foundation now includes a FastAPI process, environment settings, async SQLAlchemy
+engine/session setup, Alembic, PostgreSQL 17 with pgvector, a React status shell, container topology,
+tests, and CI. No document, register, graph, model, human-review, MCP business-tool, resume,
+incremental-update, or watcher behavior described below exists yet. Implementation evidence may
+simplify or revise the planned design; any revision must be recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -38,6 +42,35 @@ Assignment requested/preferred:
 The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
+
+## Implemented Phase 01 foundation
+
+The current runtime boundary is deliberately small:
+
+```mermaid
+flowchart LR
+    Browser[ReactStatusShell] -->|/api/*| Nginx[Nginx]
+    Nginx --> API[FastAPI]
+    API -->|readiness query only| DB[(PostgreSQL17_pgvector)]
+    Alembic[AlembicStartupMigration] --> DB
+```
+
+- Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
+- FastAPI owns liveness, readiness, and version/phase metadata only.
+- `/health` has no database dependency.
+- `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
+  `vector`; safe structured HTTP 503 output is returned otherwise.
+- SQLAlchemy creates an async engine and session factory during application lifespan and disposes
+  the engine during shutdown. No business repository or model exists.
+- Alembic revision `20260819_0001` enables `vector`; it creates no Task 1 business tables.
+- Compose orders startup by health: database, migrating backend, then frontend.
+- PostgreSQL data uses a named persistent volume. No Redis, queue, or additional service exists.
+- LangGraph, its PostgreSQL checkpointer, pgvector's Python package, and MCP are locked for future
+  compatibility but are not imported or used by Phase 01 business code.
+
+The Phase 01 trust boundary exposes controlled readiness details rather than database driver
+messages. The configured database URL is represented as a Pydantic `SecretStr`, and no model/API key
+is required.
 
 ## Planned system shape
 

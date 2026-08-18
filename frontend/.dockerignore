@@ -1,0 +1,12 @@
+.env
+.env.*
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+*.log
+logs/
+.git/
+.gitignore
+.eslintcache
+npm-debug.log*
