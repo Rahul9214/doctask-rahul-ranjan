@@ -2,13 +2,17 @@
 
 ## Current state
 
-- **Current phase:** Phase 00 — complete
-- **Implementation status:** documentation only
-- **Application capabilities implemented:** none
-- **Dependencies installed by this work:** none
-- **Application or test commands available:** none
+- **Current phase:** Phase 01 — complete
+- **Implementation status:** verified development foundation only
+- **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
+  async database/session foundation, pgvector migration, React status shell, local Compose stack,
+  tests, quality tooling, and CI definition
+- **Dependencies installed by this work:** locked Python and npm dependencies recorded below
+- **Application or test commands available:** exact verified commands are recorded below and in
+  `README.md`
 - **Git write operations performed by the agent:** none
-- **Phase 01 readiness:** READY, pending only explicit candidate authorization to begin implementation
+- **Phase 01 status:** PASS — local and container exit gates verified
+- **Phase 02 readiness:** NOT AUTHORIZED; do not begin Task 1 business logic
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record — 2026-08-18
@@ -40,6 +44,281 @@ The candidate confirmed completing these actions personally outside the reposito
 - [x] SuperDocs GitHub organization inspected
 
 Only completion status is recorded; no document, account, credential, contact, or personal details are included.
+
+## Phase 01 record — 2026-08-19
+
+### Scope completed
+
+Implemented development foundation only:
+
+- FastAPI application factory/lifespan with `GET /health`, `GET /ready`, and `GET /version`;
+- Pydantic v2 environment settings with the database URL held as `SecretStr`;
+- async SQLAlchemy engine/session factory and graceful engine disposal;
+- Alembic configuration and revision `20260819_0001` enabling `vector`;
+- React/TypeScript status shell with loading, ready, dependency-unavailable, version, and phase
+  states;
+- PostgreSQL/pgvector, backend, and Nginx-served frontend Compose services;
+- persistent local database volume and dependency-aware health ordering;
+- backend/frontend formatting, lint, typecheck, test, coverage, and build commands;
+- PostgreSQL/pgvector integration test; and
+- one concise GitHub Actions CI workflow.
+
+No Task 1 business table, ingestion/parser, LangGraph workflow, LLM integration, human review,
+MCP business tool, watcher, or incremental update was implemented.
+
+### Runtime and dependency decisions
+
+- CPython **3.13.14** is the exact project runtime. The host's CPython 3.14.4 was not modified.
+- uv **0.11.26** manages/downloads Python and locks Python packages.
+- Node.js **22.20.0** is the selected frontend runtime baseline. npm **11.12.1** is the candidate
+  verification version, not an enforced project-wide exact version. The committed
+  `package-lock.json` defines dependency resolution.
+- PostgreSQL **17** and pgvector **0.8.1** use
+  `pgvector/pgvector:0.8.1-pg17-bookworm`; its amd64/arm64 manifest was inspected before use.
+- Backend direct versions: Alembic 1.19.1, asyncpg 0.31.0, FastAPI 0.141.1, LangGraph 1.2.11,
+  langgraph-checkpoint-postgres 3.1.2, MCP 2.0.0, pgvector 0.5.0, Pydantic 2.13.4,
+  pydantic-settings 2.15.0, SQLAlchemy 2.0.52, and Uvicorn 0.52.3.
+- Backend development versions: HTTPX 0.28.1, mypy 2.3.1, pytest 9.1.1,
+  pytest-asyncio 1.4.0, pytest-cov 7.1.0, and Ruff 0.16.3.
+- Frontend direct baseline: React/React DOM 19.2.8, Vite 8.2.1, TypeScript 6.0.3,
+  ESLint 10.8.1, Prettier 3.9.6, Vitest 4.1.11, jsdom 29.1.1, and React Testing Library 16.3.2.
+  Exact transitive resolutions are in `package-lock.json`.
+
+Current authoritative PyPI metadata reported Python 3.13 compatibility for all selected backend
+packages. Python 3.13 was selected over 3.14 because it is the newer stable line with broader
+ecosystem wheel/runtime maturity across the full planned stack.
+
+LangGraph, its PostgreSQL checkpoint package, pgvector's Python integration, and MCP are locked now
+for compatibility evidence only. Phase 01 application code does not import or use their business
+APIs.
+
+### Cursor implementation verification — exact commands and final results
+
+Inspection:
+
+- `git branch --show-current` — `feat/phase-01-foundation`
+- `git status --short --branch` — clean before implementation
+- `git log -5 --oneline --decorate` and `git ls-files` — Phase 00 baseline inspected
+- `python --version`, `py -0p`, `uv --version`, `node --version`, `npm --version`,
+  `docker --version`, `docker compose version` — host versions captured
+- PyPI JSON metadata queries for every direct backend/runtime tool — versions and
+  `requires_python` inspected
+- npm metadata queries for React/Vite/TypeScript/ESLint/Prettier/Vitest/RTL — versions and Node
+  engines inspected
+- `uv python list 3.13` — CPython 3.13.14 managed download confirmed
+- `docker manifest inspect pgvector/pgvector:0.8.1-pg17-bookworm --verbose` — image/platforms
+  confirmed
+
+Backend final gate from `backend/`:
+
+- `uv sync --frozen --all-groups` — PASS; 90 packages resolved, 88 installed/checked
+- `uv run ruff format --check .` — PASS; 10 files already formatted
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; no issues in 8 source files
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 7 passed, 1 integration test skipped
+  without `TEST_DATABASE_URL`, 97.96% total coverage
+- `uv build` — PASS; source distribution and wheel built
+
+Real database gate:
+
+- `uv run alembic current` with the running Compose database — PASS;
+  `20260819_0001 (head)`
+- `uv run pytest tests/test_readiness_integration.py` with `DATABASE_URL` and
+  `TEST_DATABASE_URL` set — PASS; 1 passed against PostgreSQL/pgvector
+
+Frontend final gate from `frontend/` during Cursor implementation verification:
+
+- `npm ci` — PASS; 235 packages installed, 0 reported vulnerabilities
+- `npm run format:check` — PASS
+- `npm run lint` — PASS
+- `npm run typecheck` — PASS
+- `npm test` — PASS; 1 file and 4 tests passed
+- `npm run build` — PASS; Vite production output built
+
+Container/runtime gate from repository root:
+
+- `docker compose config` and final `docker compose config --quiet` — PASS
+- `docker compose build` — PASS for backend and frontend
+- `docker compose up --build --detach` — PASS as the combined build/start path; all services became
+  healthy and readiness/frontend smoke checks passed
+- `docker compose up --detach` — PASS; database, backend, and frontend started
+- `docker compose exec backend alembic current` — PASS; migration at head
+- `Invoke-RestMethod http://localhost:8000/health` — PASS; `alive`
+- `Invoke-RestMethod http://localhost:8000/ready` — PASS; PostgreSQL and pgvector `ready`,
+  pgvector `0.8.1`
+- `Invoke-RestMethod http://localhost:8000/version` — PASS; version `0.1.0`, Phase 01, truthful
+  not-implemented status
+- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/` — PASS; HTTP 200
+- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready` — PASS; HTTP 200 through
+  Nginx proxy
+- `docker compose ps` — PASS; all three services healthy
+- Browser accessibility snapshot — PASS; rendered `Foundation ready`, version `0.1.0`, current
+  Phase 01, and `Task 1 business workflow is not implemented yet.`
+- Browser console error check — PASS; zero errors/warnings
+- `docker compose down` — PASS; containers/network removed and persistent volume retained
+- final `docker compose ps --all` — PASS; no running project containers
+
+### Candidate-side independent verification correction — 2026-08-19
+
+The candidate independently confirmed that backend, Docker, PostgreSQL/pgvector, migration,
+readiness, HTTP smoke, and real database integration gates passed.
+
+The candidate's initial independent frontend verification produced:
+
+- `npm ci` — PASS
+- `npm run format:check` — **FAIL**; Prettier reported formatting drift/non-canonical formatting in:
+  - `.prettierrc.json`
+  - `eslint.config.js`
+  - `src/App.test.tsx`
+  - `src/App.tsx`
+  - `src/main.tsx`
+  - `src/styles.css`
+  - `src/test/setup.ts`
+  - `vite.config.ts`
+
+The candidate corrected the defect with:
+
+- `npm run format` — PASS; Prettier applied canonical formatting
+
+The candidate then reran the complete affected frontend quality/build gate:
+
+- `npm run format:check` — PASS; `All matched files use Prettier code style!`
+- `npm run lint` — PASS
+- `npm run typecheck` — PASS
+- `npm test` — PASS; 1 test file and 4 tests passed
+- `npm run build` — PASS; Vite production build completed successfully
+
+This candidate-side failure remains part of the evidence history. Phase 01 remains PASS only because
+the formatting defect was corrected and every affected frontend gate was rerun successfully.
+
+README command verification after the correction:
+
+- frontend scripts in `README.md` match `frontend/package.json`, including `npm run format`,
+  `npm run format:check`, lint, typecheck, tests, and build;
+- backend commands match the tools/configuration in `backend/pyproject.toml`; and
+- `docker compose config --quiet` passed for the documented Compose commands.
+
+No README command correction was required.
+
+### Independent Phase 01 verification — PASS_WITH_CHANGES — 2026-08-19
+
+- Independent verifier result: **PASS_WITH_CHANGES**
+- Critical findings: **none**
+- Remote CI: **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED**
+- Fresh-clone Behavior 6: **NOT_STARTED**
+
+Minimal corrections applied:
+
+- Hardened `backend/.dockerignore` against environment files, virtual environments, Python
+  caches/bytecode, test/type/lint caches, coverage, build output, and logs.
+- Hardened `frontend/.dockerignore` against environment files, dependency/build/coverage output,
+  TypeScript build metadata, logs, and Git metadata.
+- Corrected npm wording: Node.js 22.20.0 is the selected runtime baseline, npm 11.12.1 is the
+  candidate verification version, and `package-lock.json` is the committed dependency resolution.
+- Clarified that the local Compose `POSTGRES_PASSWORD` must match `[A-Za-z0-9_]+` because the same
+  literal value is passed to PostgreSQL and interpolated into `DATABASE_URL`. Percent-encoded or
+  arbitrary special-character values are not supported by this simple local Compose path.
+- Added root `logs/` ignore coverage while retaining `*.log`.
+
+Correction verification:
+
+- Backend Ruff format check — PASS; 10 files formatted
+- Backend Ruff lint — PASS
+- Backend mypy — PASS; no issues in 8 source files
+- Backend pytest/coverage final rerun — PASS; 7 passed, 1 integration test skipped without
+  `TEST_DATABASE_URL`, 97.96% coverage
+- Backend package build — PASS; source distribution and wheel built
+- Frontend Prettier check — PASS; canonical formatting confirmed
+- Frontend ESLint — PASS
+- Frontend TypeScript typecheck — PASS
+- Frontend Vitest — PASS; 1 test file and 4 tests passed
+- Frontend production build — PASS
+- `docker compose config` — PASS
+- `docker compose build` — PASS; both hardened contexts retained every required Docker build input
+- `docker compose up --detach` and `docker compose ps` — PASS; database, backend, and frontend all
+  healthy
+- `/health`, `/ready`, and `/version` — PASS
+- Frontend `/` and `/api/ready` — PASS; HTTP 200
+- `docker compose exec backend alembic current` — PASS; `20260819_0001 (head)`
+- Container startup logs — PASS; migration, Uvicorn, and Nginx startup completed without runtime
+  package synchronization
+- `docker compose down` — PASS; containers/network removed and persistent volume retained
+- final `docker compose ps --all` — PASS; no project containers remained
+- `git diff --check` — PASS
+
+### Failures encountered and fixes
+
+- Initial `uv sync --all-groups` failed because Hatchling rejects a package `readme` outside the
+  backend project root. Removed the invalid `../README.md` package metadata reference; sync and
+  builds then passed.
+- Initial Ruff lint found two import-order issues and one unused import. Applied Ruff's safe fixes
+  and reran format/lint successfully.
+- `npm create vite` received its template option incorrectly under the host npm version and created
+  a vanilla TypeScript scaffold. The generated placeholder files were removed and the intended
+  React/TypeScript configuration was created and tested.
+- The first frontend test command entered Vitest watch mode because npm parsed `--run` as npm
+  configuration. Changed the repository script to `vitest run`; tests then exited cleanly.
+- A parallel `npm ci` and Prettier check raced while `node_modules` was being replaced, producing a
+  false “prettier not recognized” failure. Dependency installation and quality checks were rerun in
+  the correct sequence and passed.
+- Candidate-side independent verification later found genuine formatting drift/non-canonical
+  formatting in eight frontend files. The candidate ran `npm run format`, then reran
+  `format:check`, lint, typecheck, tests, and build; every rerun passed. This failure is separate from
+  Cursor's earlier dependency-install race and is retained as correction evidence.
+- The first correction-phase coverage invocation inherited a stale `TEST_DATABASE_URL` from the
+  persistent verification shell while Compose was stopped, so the real integration test attempted
+  a closed local port and failed. Cleared only the temporary database environment variables and
+  reran the requested coverage command; 7 tests passed, 1 integration test skipped as designed,
+  and coverage was 97.96%. No application change was required.
+- Initial backend coverage was 89.80%, below the configured 90% gate. Added direct tests for actual
+  pgvector-ready and extension-missing readiness branches; final coverage is 97.96%.
+- Docker build initially failed because Docker Desktop was installed but its daemon was stopped.
+  Docker Desktop was started without changing Docker/global configuration.
+- One long Docker build attempt was interrupted before completion. The resumed build used visible
+  plain progress, completed successfully, and the final cached full build also passed.
+- Backend startup logs showed `uv run` synchronizing development packages at container startup.
+  Changed the runtime command to invoke installed `alembic` and `uvicorn` executables directly;
+  clean startup then performed no package synchronization.
+- Frontend container health remained unhealthy because BusyBox `wget` could not connect to
+  `localhost` while Nginx listened on IPv4. Changed the health target to `127.0.0.1`; all services
+  then reported healthy.
+- One PowerShell smoke command placed `-Depth` on `Invoke-RestMethod`, which PowerShell 5 does not
+  support. Moved `-Depth` to `ConvertTo-Json`; the readiness smoke check passed.
+
+### Security verification
+
+- No model key, SuperDocs key, GitHub token, personal credential, or real secret was added.
+- `.env` and common secret/runtime/build/cache outputs are ignored; only safe local defaults appear
+  in `.env.example`.
+- The database URL is a Pydantic `SecretStr`.
+- Readiness exceptions are mapped to controlled cause/remedy text; raw driver exceptions and URLs
+  are not returned.
+- A backend test embeds a sentinel password and confirms it is absent from readiness output.
+- npm reported zero known vulnerabilities during the recorded install.
+- Container logs inspected during verification contained no environment credentials or keys.
+
+### Assumptions and limitations
+
+- The verified deployment is local/container development, not internet-facing production.
+- Local database credentials are intentionally low-sensitivity defaults and must be changed for
+  any non-local environment.
+- Runtime containers currently run with image-default users; non-root hardening is deferred.
+- Remote CI remains **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED**. It cannot execute until the
+  candidate pushes the branch and triggers GitHub CI.
+- Major-version GitHub Action references are used; immutable action SHA pinning is not yet applied.
+- Docker image tags are version-pinned, while registry content trust/signature enforcement is not
+  configured.
+- No business capability from Task 1 is present, including business schema, graph, checkpoints,
+  review, ingestion, MCP operations, model gateway, or watcher.
+
+### Phase 01 conclusion
+
+Phase 01 exit gate: **PASS** after applying and verifying the independent verifier's
+`PASS_WITH_CHANGES` corrections, with zero critical findings. This status includes the
+candidate-side formatting failure and remains PASS only because canonical formatting was applied
+and the full affected frontend gate passed on rerun. Remote CI remains unverified, fresh-clone
+Behavior 6 remains `NOT_STARTED`, and Phase 02 must not begin without separate candidate
+authorization.
 
 ### Approved direction
 
@@ -236,7 +515,7 @@ Each is a **Strong differentiator — may be cut only with explicit rationale if
 - Cause/remedy dependency failures and resumability — `NOT_STARTED`
 - Working fallback/retry/skip/escalation paths, without unproven fallback claims — `NOT_STARTED`
 - Streamed large-file upload — `NOT_STARTED`
-- Lint/format/typecheck/test/build/smoke/cleanup command proof — `NOT_STARTED`
+- Phase 01 lint/format/typecheck/test/build/smoke/cleanup command proof — `PASS`
 
 ## Candidate execution constraint and project planning assumption
 
@@ -269,25 +548,31 @@ Never cut the five explicit floor behaviors: visible path-changing stages, durab
 
 ## Known limitations
 
-- The repository currently contains documentation only.
-- No proposed architecture has been validated against code or runtime behavior.
-- No exact package versions or project scripts have been selected or verified.
-- The host currently has Python 3.14, which may not be supported by all planned packages; a supported container version must be selected from actual compatibility evidence.
+- The repository contains a verified Phase 01 development foundation only.
+- Only foundation architecture has been validated against runtime behavior; all Task 1 business
+  architecture remains planned.
+- CPython 3.13.14 is pinned and verified through uv/containers; the host's Python 3.14.4 remains
+  installed but is not the project runtime.
 - PDF/DOCX locator fidelity is not yet proven.
 - LangGraph PostgreSQL checkpoint/interrupt behavior is not yet proven.
 - Same-corpus publication locking and idempotency are not yet designed at schema level.
 - The incremental impact algorithm is not implemented or measured.
-- The MCP package/protocol choice is not verified.
+- MCP 2.0.0 install/runtime compatibility is verified; no MCP server, business operation, or
+  protocol behavior is implemented or tested.
 - No live model provider is selected.
 - No deterministic fallback, retry, safe-skip, escalation, or ambiguous-provider-outcome reconciliation path is implemented or tested.
 - No hosted deployment is promised.
+- No internet-facing authentication, authorization, TLS termination, non-root container hardening,
+  image signature enforcement, or production deployment is implemented.
+- Remote CI is **DEFINED / LOCALLY MIRRORED / REMOTE UNVERIFIED** because Git write/push operations
+  remain candidate-owned.
 - SuperDocs familiarization and documentation prerequisites are complete by manual candidate confirmation; no repository artifact or runtime proof is claimed.
 
 ## Phase 01 entry criteria
 
 Before Phase 01 implementation begins:
 
-- [ ] Candidate explicitly authorizes Phase 01.
+- [x] Candidate explicitly authorizes Phase 01.
 - [x] Candidate confirms genuine SuperDocs use: authorized/non-confidential document, warm-up instruction, upload/open, targeted edit, Review Mode, human decision, export/download, and opened/verified export.
 - [x] Candidate confirms reviewing relevant SuperDocs documentation, REST/API and MCP concepts, and the SuperDocs GitHub organization.
 - [x] Phase 00 files have been reread and cross-checked against the approved Task 1 checklist.
@@ -303,13 +588,17 @@ Phase 01 execution requirements after authorization:
 - Begin with repository and package compatibility inspection before choosing dependencies.
 - Supply exact Phase 01 commands before requesting any manual prerequisite action.
 
-**Readiness: READY — pending only explicit candidate authorization to begin implementation.**
+**Historical entry result: PASS. Phase 01 implementation and verification completed.**
 
 ## Verification log
 
 Phase 00 verification status: **PASS — authoritative assignment comparison completed; independent verifier findings incorporated at documentation level.**
 
-This is documentation-level verification only. No runtime implementation verification is claimed.
+Phase 01 verification status: **PASS — local quality, real PostgreSQL/pgvector integration,
+container startup/migration/readiness, rendered frontend, and cleanup gates completed.**
+
+The Phase 00 result remains documentation-level evidence. The Phase 01 result is executable
+foundation evidence only and does not prove any Task 1 business behavior.
 
 All four files were reread after the final correction pass. Incorporated findings include:
 
@@ -326,8 +615,9 @@ All four files were reread after the final correction pass. Incorporated finding
 - the 24-hour schedule is labeled a candidate execution constraint/project planning assumption; and
 - SuperDocs confirmation logging is labeled our process choice rather than an assignment-mandated artifact.
 
-No implemented application capability is claimed.
+Only the Phase 01 foundation capabilities listed in this record are implemented.
 
 ## Next safe step
 
-Await explicit candidate authorization for Phase 01. Do not create application code, install dependencies, create backend/frontend directories, or execute Git writes without that authorization.
+The candidate reviews the corrected uncommitted diff, performs Git writes personally, and observes
+GitHub CI. Do not begin Phase 02 or Task 1 business logic without separate explicit authorization.

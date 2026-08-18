@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.1-pg17-bookworm
+        env:
+          POSTGRES_DB: project_assurance
+          POSTGRES_PASSWORD: ci_only
+          POSTGRES_USER: project_assurance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U project_assurance -d project_assurance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+asyncpg://project_assurance:ci_only@localhost:5432/project_assurance
+      TEST_DATABASE_URL: postgresql+asyncpg://project_assurance:ci_only@localhost:5432/project_assurance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.26"
+          enable-cache: true
+      - run: uv python install 3.13.14
+      - run: uv sync --frozen --all-groups
+      - run: uv run alembic upgrade head
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy src tests
+      - run: uv run pytest --cov=app --cov-report=term-missing
+      - run: uv build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

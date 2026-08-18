@@ -10,9 +10,13 @@ Do not implement Task 2, Task 3, Task 4, or extra credit. Task 4 video/write-up/
 
 ## Current implementation state
 
-Phase 00 contains documentation only.
+Phase 01 implements and verifies the development foundation: FastAPI liveness/readiness/version
+metadata, environment settings, async SQLAlchemy/Alembic setup, PostgreSQL 17 with pgvector, a React
+status shell, local Compose deployment, tests, quality commands, and CI configuration.
 
-No FastAPI service, LangGraph graph, PostgreSQL schema, pgvector retrieval, React interface, MCP server, watcher, model adapter, container deployment, test suite, measurement, or application command is implemented yet.
+No Task 1 business schema, document ingestion, LangGraph graph, pgvector retrieval, MCP server,
+watcher, model adapter, human-review flow, incremental processing, or measurement system is
+implemented yet.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
