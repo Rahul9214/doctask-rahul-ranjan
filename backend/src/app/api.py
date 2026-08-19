@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFil
 
 from app.examine_service import ExamineService, stage_event_response
 from app.parsers import SourceFormat
+from app.review_service import ReviewService, session_response
 from app.schemas import (
     AnalysisRunResponse,
     CitationRequest,
@@ -18,6 +19,10 @@ from app.schemas import (
     FactResponse,
     FindingResponse,
     IngestionResponse,
+    ReviewDecisionCreate,
+    ReviewDecisionResult,
+    ReviewItemResponse,
+    ReviewSessionResponse,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -46,9 +51,14 @@ def get_examine_service(request: Request) -> ExamineService:
     return cast(ExamineService, request.app.state.examine_service)
 
 
+def get_review_service(request: Request) -> ReviewService:
+    return cast(ReviewService, request.app.state.review_service)
+
+
 Service = Annotated[Phase02Service, Depends(get_phase02_service)]
 Understand = Annotated[UnderstandService, Depends(get_understand_service)]
 Examine = Annotated[ExamineService, Depends(get_examine_service)]
+Review = Annotated[ReviewService, Depends(get_review_service)]
 
 
 @router.post("/corpora", response_model=CorpusResponse, status_code=status.HTTP_201_CREATED)
@@ -284,3 +294,75 @@ async def get_examination_stage_events(
         stage_event_response(event)
         for event in await examine.list_stage_events(corpus_id, examination_run_id)
     ]
+
+
+@router.post(
+    "/corpora/{corpus_id}/examination-runs/{examination_run_id}/review-sessions",
+    response_model=ReviewSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_review_session(
+    corpus_id: UUID,
+    examination_run_id: UUID,
+    response: Response,
+    review: Review,
+) -> ReviewSessionResponse:
+    session, created = await review.create_session(corpus_id, examination_run_id)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return session_response(session)
+
+
+@router.get(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}",
+    response_model=ReviewSessionResponse,
+)
+async def get_review_session(
+    corpus_id: UUID, review_session_id: UUID, review: Review
+) -> ReviewSessionResponse:
+    return session_response(await review.get_session(corpus_id, review_session_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}/items",
+    response_model=list[ReviewItemResponse],
+)
+async def list_review_items(
+    corpus_id: UUID, review_session_id: UUID, review: Review
+) -> list[ReviewItemResponse]:
+    return await review.list_items(corpus_id, review_session_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}/items/{item_id}",
+    response_model=ReviewItemResponse,
+)
+async def get_review_item(
+    corpus_id: UUID, review_session_id: UUID, item_id: UUID, review: Review
+) -> ReviewItemResponse:
+    return await review.get_item(corpus_id, review_session_id, item_id)
+
+
+@router.post(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}/items/{item_id}/decisions",
+    response_model=ReviewDecisionResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_review_decision(
+    corpus_id: UUID,
+    review_session_id: UUID,
+    item_id: UUID,
+    payload: ReviewDecisionCreate,
+    review: Review,
+) -> ReviewDecisionResult:
+    return await review.record_decision(corpus_id, review_session_id, item_id, payload)
+
+
+@router.post(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}/complete",
+    response_model=ReviewSessionResponse,
+)
+async def complete_review_session(
+    corpus_id: UUID, review_session_id: UUID, review: Review
+) -> ReviewSessionResponse:
+    return session_response(await review.complete_session(corpus_id, review_session_id))

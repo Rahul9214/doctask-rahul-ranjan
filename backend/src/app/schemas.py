@@ -293,3 +293,101 @@ class ExaminationSummaryResponse(BaseModel):
     ruleset_version: str
     outcomes: dict[str, int]
     finding_rule_ids: list[str]
+
+
+class ReviewCitation(BaseModel):
+    source_version_id: UUID
+    source_sha256: str
+    format: SourceFormat
+    native_locator: str
+    normalized_start: int
+    normalized_end: int
+    exact_quote: str
+    source_logical_name: str | None = None
+    source_block_id: UUID | None = None
+
+
+class ReviewDecisionCreate(BaseModel):
+    action: Literal["approve", "reject", "edit"]
+    edited_content: str | None = Field(default=None, max_length=8_000)
+    reviewer_authored_acknowledged: bool = False
+    comment: str | None = Field(default=None, max_length=2_000)
+    actor: str = Field(default="reviewer", min_length=1, max_length=100)
+    decision_source: Literal["api", "ui"] = "api"
+    proposal_set_version: int | None = Field(default=None, ge=1)
+
+
+class ReviewDecisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    review_item_id: UUID
+    review_session_id: UUID
+    corpus_id: UUID
+    action: str
+    previous_status: str
+    new_status: str
+    original_proposed_content: dict[str, object]
+    edited_content: str | None
+    edited_content_is_reviewer_authored: bool
+    reviewer_authored_acknowledged: bool
+    comment: str | None
+    actor: str
+    decision_source: str
+    decided_at: datetime
+    created_at: datetime
+
+
+class ReviewItemResponse(BaseModel):
+    id: UUID
+    review_session_id: UUID
+    corpus_id: UUID
+    examination_run_id: UUID
+    finding_id: UUID
+    rule_id: str
+    rule_version: str
+    title: str
+    outcome: str
+    severity: str
+    message: str
+    structured_reason: dict[str, object]
+    evidence_kind: str
+    review_required: bool
+    review_status: str
+    proposed_content: dict[str, object]
+    edited_content: str | None
+    edited_content_is_reviewer_authored: bool
+    fact_ids: list[UUID]
+    contradiction_ids: list[UUID]
+    citations: list[ReviewCitation]
+    grounded_facts: list[FactResponse]
+    contradictions: list[ContradictionResponse]
+    confidence: float
+    created_at: datetime
+    decisions: list[ReviewDecisionResponse]
+
+
+class ReviewSessionResponse(BaseModel):
+    id: UUID
+    corpus_id: UUID
+    examination_run_id: UUID
+    analysis_run_id: UUID
+    status: str
+    proposal_set_version: int
+    required_item_count: int
+    optional_item_count: int
+    pending_count: int
+    approved_count: int
+    rejected_count: int
+    edited_count: int
+    completion_allowed: bool
+    session_creation_ms: int
+    failed_complete_attempts: int
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class ReviewDecisionResult(BaseModel):
+    session: ReviewSessionResponse
+    item: ReviewItemResponse
+    decision: ReviewDecisionResponse

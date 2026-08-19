@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -595,6 +596,239 @@ class ExaminationStageEvent(Base):
     status: Mapped[str] = mapped_column(String(20))
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     skip_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ReviewSession(Base):
+    __tablename__ = "review_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "examination_runs.id",
+                "examination_runs.corpus_id",
+                "examination_runs.analysis_run_id",
+            ],
+            name="fk_review_sessions_examination_run_corpus_analysis",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "corpus_id", name="uq_review_sessions_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "corpus_id",
+            "examination_run_id",
+            name="uq_review_sessions_id_corpus_examination",
+        ),
+        UniqueConstraint(
+            "id",
+            "corpus_id",
+            "examination_run_id",
+            "analysis_run_id",
+            name="uq_review_sessions_id_corpus_examination_analysis",
+        ),
+        UniqueConstraint(
+            "corpus_id",
+            "examination_run_id",
+            name="uq_review_sessions_corpus_examination",
+        ),
+        CheckConstraint(
+            "status IN ('waiting_for_review', 'completed')",
+            name="ck_review_sessions_status",
+        ),
+        CheckConstraint(
+            "(status = 'waiting_for_review' AND completed_at IS NULL) OR "
+            "(status = 'completed' AND completed_at IS NOT NULL)",
+            name="ck_review_sessions_completion_timestamp",
+        ),
+        CheckConstraint("proposal_set_version >= 1", name="ck_review_sessions_proposal_version"),
+        CheckConstraint("required_item_count >= 0", name="ck_review_sessions_required_count"),
+        CheckConstraint("optional_item_count >= 0", name="ck_review_sessions_optional_count"),
+        CheckConstraint("pending_count >= 0", name="ck_review_sessions_pending_count"),
+        CheckConstraint("approved_count >= 0", name="ck_review_sessions_approved_count"),
+        CheckConstraint("rejected_count >= 0", name="ck_review_sessions_rejected_count"),
+        CheckConstraint("edited_count >= 0", name="ck_review_sessions_edited_count"),
+        CheckConstraint("session_creation_ms >= 0", name="ck_review_sessions_creation_ms"),
+        CheckConstraint(
+            "failed_complete_attempts >= 0",
+            name="ck_review_sessions_failed_complete_attempts",
+        ),
+        Index("ix_review_sessions_corpus_id", "corpus_id"),
+        Index("ix_review_sessions_examination_run_id", "examination_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=False
+    )
+    examination_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="waiting_for_review")
+    proposal_set_version: Mapped[int] = mapped_column(Integer, default=1)
+    required_item_count: Mapped[int] = mapped_column(Integer, default=0)
+    optional_item_count: Mapped[int] = mapped_column(Integer, default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    approved_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+    edited_count: Mapped[int] = mapped_column(Integer, default=0)
+    session_creation_ms: Mapped[int] = mapped_column(Integer, default=0)
+    failed_complete_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    result_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReviewItem(Base):
+    __tablename__ = "review_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_session_id", "corpus_id", "examination_run_id", "analysis_run_id"],
+            [
+                "review_sessions.id",
+                "review_sessions.corpus_id",
+                "review_sessions.examination_run_id",
+                "review_sessions.analysis_run_id",
+            ],
+            name="fk_review_items_session_corpus_examination_analysis",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["finding_id", "examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "findings.id",
+                "findings.examination_run_id",
+                "findings.corpus_id",
+                "findings.analysis_run_id",
+            ],
+            name="fk_review_items_finding_run_corpus_analysis",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "corpus_id", name="uq_review_items_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "review_session_id",
+            "corpus_id",
+            name="uq_review_items_id_session_corpus",
+        ),
+        UniqueConstraint(
+            "review_session_id",
+            "finding_id",
+            name="uq_review_items_session_finding",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending', 'approved', 'rejected', 'edited')",
+            name="ck_review_items_review_status",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(proposed_content) = 'object'",
+            name="ck_review_items_proposed_object",
+        ),
+        CheckConstraint("char_length(btrim(rule_id)) > 0", name="ck_review_items_rule_id"),
+        CheckConstraint(
+            "(current_edited_content IS NULL AND "
+            "edited_content_is_reviewer_authored IS FALSE) OR "
+            "(current_edited_content IS NOT NULL AND "
+            "char_length(btrim(current_edited_content)) > 0 AND "
+            "edited_content_is_reviewer_authored IS TRUE)",
+            name="ck_review_items_edited_content",
+        ),
+        Index("ix_review_items_corpus_id", "corpus_id"),
+        Index("ix_review_items_review_session_id", "review_session_id"),
+        Index("ix_review_items_finding_id", "finding_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    review_session_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    examination_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    finding_id: Mapped[UUID] = mapped_column(nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(100))
+    outcome: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(200))
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending")
+    proposed_content: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    current_edited_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edited_content_is_reviewer_authored: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["review_item_id", "review_session_id", "corpus_id"],
+            ["review_items.id", "review_items.review_session_id", "review_items.corpus_id"],
+            name="fk_review_decisions_item_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_session_id", "corpus_id"],
+            ["review_sessions.id", "review_sessions.corpus_id"],
+            name="fk_review_decisions_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "corpus_id", name="uq_review_decisions_id_corpus"),
+        CheckConstraint(
+            "action IN ('approve', 'reject', 'edit')",
+            name="ck_review_decisions_action",
+        ),
+        CheckConstraint(
+            "previous_status IN ('pending', 'approved', 'rejected', 'edited')",
+            name="ck_review_decisions_previous_status",
+        ),
+        CheckConstraint(
+            "new_status IN ('pending', 'approved', 'rejected', 'edited')",
+            name="ck_review_decisions_new_status",
+        ),
+        CheckConstraint(
+            "(action = 'approve' AND new_status = 'approved') OR "
+            "(action = 'reject' AND new_status = 'rejected') OR "
+            "(action = 'edit' AND new_status = 'edited')",
+            name="ck_review_decisions_action_status",
+        ),
+        CheckConstraint(
+            "(action <> 'edit' AND edited_content IS NULL AND "
+            "edited_content_is_reviewer_authored IS FALSE AND "
+            "reviewer_authored_acknowledged IS FALSE) OR "
+            "(action = 'edit' AND edited_content IS NOT NULL AND "
+            "char_length(btrim(edited_content)) > 0 AND "
+            "edited_content_is_reviewer_authored IS TRUE AND "
+            "reviewer_authored_acknowledged IS TRUE)",
+            name="ck_review_decisions_edit_content",
+        ),
+        CheckConstraint(
+            "decision_source IN ('api', 'ui')",
+            name="ck_review_decisions_source",
+        ),
+        CheckConstraint("char_length(btrim(actor)) > 0", name="ck_review_decisions_actor"),
+        Index("ix_review_decisions_corpus_id", "corpus_id"),
+        Index("ix_review_decisions_review_item_id", "review_item_id"),
+        Index("ix_review_decisions_review_session_id", "review_session_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    review_item_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_session_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(20))
+    previous_status: Mapped[str] = mapped_column(String(20))
+    new_status: Mapped[str] = mapped_column(String(20))
+    original_proposed_content: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    edited_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edited_content_is_reviewer_authored: Mapped[bool] = mapped_column(Boolean, default=False)
+    reviewer_authored_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor: Mapped[str] = mapped_column(String(100), default="reviewer")
+    decision_source: Mapped[str] = mapped_column(String(20), default="api")
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -2,27 +2,31 @@
 
 ## Current state
 
-- **Current phase:** Phase 04 â€” Examine â€” local initial implementation PASS; independent
-  verification FAIL / NO-GO; correction in progress
+- **Current phase:** Phase 05 — Human Review — local initial PASS; independent verification
+  FAIL / NO-GO; correction implemented locally; independent re-verification of that correction
+  is not complete
 - **Implementation status:** grounded Understand is committed on `main`. Grounded Examine is
-  implemented locally; independent Phase 04 verification returned FAIL / NO-GO and is being
-  corrected. Independent verification of this correction is not complete.
+  implemented locally (Phase 04 independent FAIL / NO-GO remains historical). Phase 05 human review
+  is implemented locally on `feat/phase-05-human-review`. Independent verification of the initial
+  Phase 05 implementation returned FAIL / NO-GO. The listed blockers are corrected locally;
+  independent re-verification is not complete.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
   deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
   LangGraph Understand (classify/extract/ground/contradict/unknowns), inspectable analysis-run APIs,
   versioned `software-project-assurance.v1` Examine ruleset, LangGraph Examine
   (load/select/evaluate/validate/summarize/finalize), inspectable examination-run APIs,
-  React status shell, local Compose stack, tests, and CI definition
+  explicit review sessions/items/decisions, a minimal React review panel, local Compose stack,
+  tests, and CI definition
 - **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
   httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter
 - **Application or test commands available:** exact verified commands are recorded below and in
   `README.md`
 - **Git write operations performed by the agent:** none
-- **Phase 01 status:** COMPLETE â€” local verification PASS, remote CI PASS, merged to `main`
-- **Phase 01 remote CI status:** PASS â€” attempt 2 backend/frontend and all PR checks passed
+- **Phase 01 status:** COMPLETE — local verification PASS, remote CI PASS, merged to `main`
+- **Phase 01 remote CI status:** PASS — attempt 2 backend/frontend and all PR checks passed
 - **Phase 01 merge status:** PR #1 merged to `main` as merge commit `cd9ffa7`
-- **Phase 02 status:** COMPLETE â€” implementation PASS, local verification PASS, independent
+- **Phase 02 status:** COMPLETE — implementation PASS, local verification PASS, independent
   verification GO, merged to `main` as merge commit `d0c2f0f` (PR #2)
 - **Phase 02 remote CI:** workflow accepted but externally blocked by account Actions
   budget/scheduler state; zero Phase 02 CI jobs materialized; normal and force cancellation
@@ -31,8 +35,10 @@
   Independent final follow-up: **GO**. Phase 03 committed. PR #3 merged to `main` as merge commit
   `ceb2bf0`. Remote CI: PASS (2 successful checks).
 - **Phase 04 status:** local initial implementation PASS; independent verification FAIL / NO-GO;
-  correction in progress until independent verification completes
-- **SuperDocs familiarization/docs confirmation:** COMPLETE â€” manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
+  correction implemented locally; independent re-verification of that correction is not complete
+- **Phase 05 status:** local initial PASS; independent verification FAIL / NO-GO; correction
+  implemented locally; independent re-verification not complete
+- **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record â€” 2026-08-18
 
@@ -580,10 +586,11 @@ Status values are `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `FAIL`, or `CUT_OPTIONAL
 - Visible path-changing stages â€” `NOT_STARTED`
 - Exact claim/finding provenance â€” `NOT_STARTED`
 - Unsupported-claim honesty â€” `NOT_STARTED`
-- Real human mixed approve/reject â€” `NOT_STARTED`
-- Approved-only application â€” `NOT_STARTED`
-- Process kill and durable resume â€” `NOT_STARTED`
-- Machine-interface end-to-end explicit gate operations â€” `NOT_STARTED`
+- Real human mixed approve/reject — `PASS` for the Phase 05 review gate (not register publication)
+- Approved-only application — `NOT_STARTED`
+- Process kill and durable resume — `NOT_STARTED`
+- Machine-interface end-to-end explicit gate operations — `PASS` for API review operations; MCP
+  remains `NOT_STARTED`
 
 ### Planned movement evidence
 
@@ -1576,3 +1583,154 @@ Docker from repository root:
 - `docker compose ps --all` â€” PASS; no project containers
 
 Independent re-verification of this correction is not complete. Do not begin Phase 05.
+
+## Phase 05 record — 2026-08-19
+
+### Scope completed
+
+Implemented the explicit human-review gate over Phase 04 Examine findings only:
+
+- Alembic revision `20260819_0005` for `review_sessions`, `review_items`, and `review_decisions`,
+  all corpus-scoped, without editing migration `20260819_0004`;
+- one review session per completed examination run, idempotent create, status
+  `waiting_for_review` until an explicit complete call;
+- one review item per finding; FAIL/WARNING/UNKNOWN are review-required; PASS items are visible
+  and optional;
+- explicit item-level `approve`, `reject`, and `edit`; append-only decision history; latest valid
+  state is current;
+- EDIT requires non-blank reviewer-authored text, retains the original proposal and grounded
+  citations, and does not mutate Phase 03/04 records;
+- completion blocked while required items remain pending;
+- inspectable review APIs plus a minimal React review panel; and
+- application version `0.5.0`, phase `Phase 05 — Human Review`.
+
+Register publication, durable kill/resume, MCP business operations, watching, incremental updates,
+and production deployment were not implemented.
+
+### Cursor implementation verification — exact commands and final results
+
+Inspection: `feat/phase-05-human-review`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- `uv sync --frozen --all-groups` — PASS
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 44 source files
+- dedicated test-database Alembic `0004 → 0005 → 0004 → 0005`,
+  `current = 20260819_0005 (head)` — PASS
+- `uv run pytest -m integration` — PASS; 45 passed
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 120 passed, **91.99%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.5.0`
+
+Frontend from `frontend/`:
+
+- `npm run format:check` / `lint` / `typecheck` — PASS
+- `npm test` — PASS; 2 files, 7 tests
+- `npm run build` — PASS
+
+Docker from repository root:
+
+- `docker compose config --quiet` — PASS
+- sequential `docker compose build backend` then `docker compose build frontend` — PASS;
+  backend image installed `project-assurance-register==0.5.0`
+- first `docker compose up --detach` started; later daemon reconnect after Docker Desktop was
+  stopped; `Start-Process` Docker Desktop then `docker compose up --detach` — PASS; db/backend/
+  frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.5.0 Phase 05 — PASS
+- frontend HTTP 200 and `/api/ready` HTTP 200 — PASS
+- `docker compose exec backend alembic current` — PASS; `20260819_0005 (head)`
+- Aurora ingest → Understand → Examine → review session create 201 / idempotent 200 —
+  required FAIL/WARNING/UNKNOWN: `spa.milestone.production-readiness=fail` (2 citations),
+  `spa.ownership.security-signoff=fail`, `spa.status.clarity=warning`,
+  `spa.ownership.budget=unknown`; pending complete → HTTP 400 `review_session_incomplete`
+- Aurora UI: complete disabled while pending; explicit reject / reviewer-authored edit /
+  two approves; complete enabled at pending=0; session `completed` with
+  approved=2 rejected=1 edited=1; edit banner states the text is not system-grounded
+- Harbor ingest → Understand → Examine → review: required UNKNOWN profile
+  (`dependency.evidence`, `production-readiness`, `budget`, `security-signoff`); no Aurora
+  names; API approve/reject/edit; mid-complete 400 `review_session_incomplete`; complete
+  after remaining required approves → `completed` approved=2 rejected=1 edited=1
+- Harbor corpus + Aurora session/exam → HTTP 404 `review_session_not_found` /
+  `examination_run_not_found`; Harbor item under Aurora session → 404 `review_item_not_found`
+
+First session create failed because SQLAlchemy inserted `review_items` before `review_sessions`.
+Flushing the session row before items fixed the FK order. Focused integration then passed.
+
+### Failures encountered
+
+- PowerShell 5 does not accept `&&`.
+- Combined frontend `npm run format` hit JavaScript heap OOM; formatting `src/` with a larger
+  heap then passed.
+- Review session create hit `fk_review_items_session_corpus_examination_analysis` until the
+  parent session was flushed before item insert.
+- Frontend edit test matched both the textarea label and the stored edit banner; the assertion
+  was narrowed to the reviewer-authored disclaimer.
+- Docker Desktop was stopped between image build and runtime smoke
+  (`npipe:////./pipe/dockerDesktopLinuxEngine`); starting Docker Desktop restored the daemon
+  and the Compose stack came up healthy without rebuilding.
+
+### Security verification
+
+- No key, credential, personal information, resume, employer/NDA data, or private source was
+  added.
+- Cross-corpus session/item lookups and wrong-session item decisions return not found without
+  traceback.
+- Reviewer-authored edits are stored as data and marked not system-grounded.
+- Phase 03/04 finding records are not mutated by review decisions.
+- Destructive integration cleanup still requires the exact disposable database
+  `project_assurance_test`, a different application database name, and
+  `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`.
+
+### Phase 05 limitations
+
+- Review does not publish a register version or apply approved items to a durable register.
+- There is no RBAC or proposer/reviewer identity separation; actor/source are audit fields.
+- Review runs in the API process. There is no worker queue, PostgreSQL checkpointer, or
+  kill/resume.
+- MCP is not implemented. Machine-driven review uses the HTTP API.
+- Frontend is a minimal review panel, not a polished dashboard.
+- Database-level mutation-prevention triggers or restricted roles are still not implemented.
+- No internet-facing authentication/authorization or production hardening is claimed.
+
+Independent verification of the initial Phase 05 implementation returned FAIL / NO-GO.
+
+Verified blockers:
+
+- review mutations were not serialized with row locks
+- completion could trust stale cached `pending_count`
+- decision versus completion races were undefined
+- same-item decision history could record inaccurate `previous_status`
+- edit acknowledgement existed in the UI only and was not enforced or persisted by the API
+
+### Phase 05 correction — 2026-08-19
+
+Corrected only those blockers:
+
+- decision transactions `SELECT` the review session `FOR UPDATE`, re-check corpus/session/
+  `waiting_for_review`/proposal version, then lock the target item, derive `previous_status`
+  from the locked row, append the decision, and recompute counts from item rows before commit
+- completion transactions lock the session, recompute counts from item rows, and do not use
+  cached `pending_count` as the completion decision
+- `reviewer_authored_acknowledged` is required and persisted for EDIT; approve/reject cannot
+  smuggle edited content
+- focused concurrency, acknowledgement, and production-readiness citation tests were added
+- uncommitted migration `20260819_0005` was updated in place for the acknowledgement column
+
+Correction verification:
+
+- backend `ruff format --check`, `ruff check`, `mypy src tests` — PASS
+- test-database Alembic `0004 → 0005 → 0004 → 0005`, `current = 20260819_0005 (head)` — PASS
+- focused `pytest tests/test_review_integration.py tests/test_review_api.py` — PASS; 14 passed
+- `pytest -m integration` — PASS; 51 passed (backend/frontend Compose services stopped during this run to avoid host MemoryError)
+- `pytest --cov=app --cov-report=term-missing` — PASS; 126 passed, **92.42%** (gate 90%)
+- `uv build` — PASS; `project_assurance_register-0.5.0`
+- frontend `format:check` / `lint` / `typecheck` / `npm test` (7 passed) / `build` — PASS
+- Docker rebuild `project-assurance-register==0.5.0`; `/health` `/ready` `/version` 0.5.0 Phase 05; alembic `20260819_0005 (head)`
+- Aurora review: production-readiness exposes both citations; pending complete 400 `review_session_incomplete`; approve/reject smuggle 400 `edit_content_not_allowed`; edit without acknowledgement 400; edit with acknowledgement persisted; complete approved=2 rejected=1 edited=1; later decision 400 `review_session_already_completed`
+- Harbor session create 201; Harbor corpus + Aurora session 404 `review_session_not_found`
+- frontend HTTP 200 and `/api/ready` 200
+
+Independent re-verification of this correction is not complete. Do not begin Phase 06 without
+separate explicit authorization. Candidate owns Git writes.

@@ -2,10 +2,11 @@
 
 ## Current status
 
-**Phase 04 — Examine: local initial implementation PASS; independent verification FAIL / NO-GO;
-correction in progress.** Phase 03 historical independent FAIL and follow-up NO-GO remain in
-`PROGRESS.md`. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged
-to `main` as `ceb2bf0`, remote CI PASS (2 successful checks).
+**Phase 05 — Human Review: local initial PASS; independent verification FAIL / NO-GO;
+correction implemented locally pending re-verification.** Phase 04
+historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03 current status is independent
+final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS (2 successful
+checks).
 
 The repository now provides grounded Understand and Examine over the Phase 02 data layer:
 
@@ -22,14 +23,16 @@ The repository now provides grounded Understand and Examine over the Phase 02 da
   rejected assertions are explicit; `untrusted_instruction` blocks are excluded from extraction;
 - a versioned ruleset `software-project-assurance.v1` plus a LangGraph Examine workflow:
   load understanding → select rules → evaluate rules → validate evidence → summarize → finalize;
-- `ExaminationRun`, `Finding`, and `ExaminationStageEvent` records with corpus isolation; and
-- all verified Phase 01/02 foundation capabilities.
+- `ExaminationRun`, `Finding`, and `ExaminationStageEvent` records with corpus isolation;
+- an explicit human review gate: `ReviewSession`, `ReviewItem`, and append-only `ReviewDecision`
+  records; FAIL/WARNING/UNKNOWN findings require a decision; generation never auto-approves; and
+- all verified Phase 01–04 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
 internet-facing production hardening remain excluded.
 
-**Item-level human review, durable kill/resume, MCP business operations, watching/incremental
-updates, register publication, and production deployment are not implemented.**
+**Durable kill/resume, MCP business operations, watching/incremental updates, register publication,
+and production deployment are not implemented.**
 
 ## Runtime and dependency baseline
 
@@ -146,9 +149,9 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.4.0`, current Phase 04 metadata, and a truthful statement that
-grounded Understand and Examine are implemented while human review, durable resume, MCP business
-operations, and watching are not.
+Returns application version `0.5.0`, current Phase 05 metadata, and a truthful statement that
+grounded Understand, Examine, and item-level human review are implemented while durable resume, MCP
+business operations, watching, and register publication are not.
 
 ### Phase 02 corpus and source API
 
@@ -221,6 +224,9 @@ Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/analysis-runs/$($
 $exam = Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8000/corpora/$($corpus.id)/analysis-runs/$($run.id)/examination-runs"
 Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/examination-runs/$($exam.id)/summary"
+$review = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/corpora/$($corpus.id)/examination-runs/$($exam.id)/review-sessions"
+Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($review.id)/items"
 ```
 
 ### Phase 04 Examine API
@@ -251,6 +257,34 @@ Ruleset `software-project-assurance.v1` is configuration data plus named evaluat
 corpus-name special-casing. Outcomes are `pass`, `fail`, `warning`, and `unknown`. An examination
 of a no-findings Understand run returns `findings_status=no_findings` with an empty finding list
 after the applicable-rule count is evaluated as zero.
+
+### Phase 05 Human Review API
+
+- `POST /corpora/{corpus_id}/examination-runs/{examination_run_id}/review-sessions`
+- `GET /corpora/{corpus_id}/review-sessions/{review_session_id}`
+- `GET /corpora/{corpus_id}/review-sessions/{review_session_id}/items`
+- `GET /corpora/{corpus_id}/review-sessions/{review_session_id}/items/{item_id}`
+- `POST /corpora/{corpus_id}/review-sessions/{review_session_id}/items/{item_id}/decisions`
+- `POST /corpora/{corpus_id}/review-sessions/{review_session_id}/complete`
+
+Every operation is corpus-scoped. The examination run must belong to the same corpus and must be
+`completed`. Session creation is idempotent for `(corpus_id, examination_run_id)`. One review item
+is created per finding. FAIL, WARNING, and UNKNOWN items require review; PASS items are visible and
+optional and do not block completion. Generation never auto-approves. Status remains
+`waiting_for_review` until an explicit complete call.
+
+Decision actions are `approve`, `reject`, and `edit`. History is append-only and the item status is
+the latest valid decision. Decision and completion transactions take PostgreSQL row locks on the
+review session; decisions also lock the target item. Session counts are recomputed from item rows
+inside that transaction. EDIT requires non-blank reviewer-authored text and
+`reviewer_authored_acknowledged=true`; the original proposed snapshot and grounded citations are
+retained, and the replacement is marked not system-grounded. Approve/reject cannot carry edited
+content. Phase 03/04 finding records are not mutated.
+
+A session completes only when every required item has a terminal explicit decision. Pending required
+items return `review_session_incomplete`. Cross-corpus session/item lookups return not found.
+Vector scores are not evidence. The same operations are available to the React review panel and to
+machine/API clients. MCP is not implemented.
 
 ### Normalization and exact provenance
 
@@ -345,7 +379,7 @@ $env:DATABASE_URL = $testDatabaseUrl
 # Alembic will not reapply revision 20260819_0004. Drop leftover Phase 04 objects only, stamp
 # 20260819_0003, then continue. Do not run that recovery against non-test data.
 uv run alembic upgrade head
-uv run alembic downgrade 20260819_0003
+uv run alembic downgrade 20260819_0004
 uv run alembic upgrade head
 uv run alembic current
 
@@ -378,9 +412,10 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.4.0`,
-`Phase 04 — Examine`, grounded Understand and Examine, and the absence of review/resume/MCP watching.
-The existing frontend remains a dependency/status shell.
+All three services should report healthy. `/version` should report application version `0.5.0`,
+`Phase 05 — Human Review`, grounded Understand/Examine plus item-level human review, and the absence
+of durable resume, MCP watching, and register publication. The frontend status shell includes a
+minimal review panel.
 
 ## CI
 
@@ -443,12 +478,13 @@ No deployment workflow exists.
   Subtle semantic conflicts outside that contract are not claimed.
 - Examine evaluates a centrally versioned ruleset against grounded Phase 03 facts. It is not a
   user-upload rule editor, generic expression engine, or register-publication step.
-- Human review, durable resume, MCP business operations, watching, and register publication remain
-  unimplemented.
+- Human review is an explicit item-level gate over Examine findings. It does not publish a register
+  version, resume a durable worker, or provide MCP tools.
+- Durable resume, MCP business operations, watching, and register publication remain unimplemented.
 - LangGraph PostgreSQL checkpoint/interrupt behavior is not used.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–04 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–05 architecture and later-phase plans

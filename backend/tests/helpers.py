@@ -9,6 +9,7 @@ from app.examine_service import ExamineService
 from app.model_gateway import DeterministicModelAdapter, ModelAdapter
 from app.models import Corpus
 from app.parsers import SourceFormat
+from app.review_service import ReviewService
 from app.services import Phase02Service
 from app.understand_service import UnderstandService
 
@@ -66,3 +67,12 @@ def make_examine(
 ) -> ExamineService:
     resolved = understand or make_understand(phase02, adapter)
     return ExamineService(phase02.session_factory, phase02, resolved)
+
+
+def make_review(
+    phase02: Phase02Service,
+    adapter: ModelAdapter | None = None,
+    examine: ExamineService | None = None,
+) -> ReviewService:
+    resolved = examine or make_examine(phase02, adapter)
+    return ReviewService(phase02.session_factory, phase02, resolved)

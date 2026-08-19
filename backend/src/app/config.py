@@ -17,13 +17,14 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.4.0"
-    current_phase: str = "Phase 04 — Examine"
+    app_version: str = "0.5.0"
+    current_phase: str = "Phase 05 — Human Review"
     implementation_status: str = (
-        "Grounded Understand and Examine are implemented: classification, fact extraction, "
-        "exact provenance validation, contradiction detection, versioned assurance rules, "
-        "and no-bluffing findings; human review, durable resume, MCP business operations, "
-        "and watching are not implemented."
+        "Grounded Understand, Examine, and item-level human review are implemented: "
+        "classification, fact extraction, exact provenance validation, contradiction "
+        "detection, versioned assurance rules, no-bluffing findings, and explicit "
+        "approve/reject/edit decisions; durable resume, MCP business operations, "
+        "watching, and register publication are not implemented."
     )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"

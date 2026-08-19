@@ -43,10 +43,10 @@ jobs:
       - run: uv sync --frozen --all-groups
       - run: uv run python scripts/ensure_test_database.py
       - run: uv run alembic upgrade head
-      - name: Verify Phase 04 test-database migration round trip
+      - name: Verify Phase 05 test-database migration round trip
         run: |
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
-          DATABASE_URL="$TEST_DATABASE_URL" uv run alembic downgrade 20260819_0003
+          DATABASE_URL="$TEST_DATABASE_URL" uv run alembic downgrade 20260819_0004
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic current
       - run: uv run ruff format --check .
