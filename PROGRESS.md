@@ -2,22 +2,34 @@
 
 ## Current state
 
-- **Current phase:** Phase 02 — PASS_WITH_CHANGES / FOLLOW-UP VERIFIER PENDING
-- **Implementation status:** verified foundation plus deterministic ingestion/provenance layer
+- **Current phase:** Phase 03 — Understand — independent follow-up NO-GO; local backend
+  follow-up correction PASS
+- **Implementation status:** independent verification FAIL on grounding (retained); later
+  follow-up NO-GO on failed-retry attempt accounting and equivalent-value contradiction
+  comparison; those two blockers plus README skip-reason docs are corrected locally and
+  backend-gated. Independent verification is not PASS.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
-  deterministic pgvector retrieval, React status shell, local Compose stack, tests, and CI definition
-- **Dependencies installed by this work:** locked Python and npm dependencies recorded below
+  deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
+  LangGraph Understand (classify/extract/ground/contradict/unknowns), inspectable analysis-run APIs,
+  React status shell, local Compose stack, tests, and CI definition
+- **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
+  httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter
 - **Application or test commands available:** exact verified commands are recorded below and in
   `README.md`
 - **Git write operations performed by the agent:** none
 - **Phase 01 status:** COMPLETE — local verification PASS, remote CI PASS, merged to `main`
 - **Phase 01 remote CI status:** PASS — attempt 2 backend/frontend and all PR checks passed
-- **Merge status:** PR #1 merged to `main` as merge commit `cd9ffa7`
-- **Phase 02 independent verification:** PASS_WITH_CHANGES — zero critical findings
-- **Phase 02 correction status:** corrections implemented locally; independent follow-up pending
-- **Phase 02 remote CI:** NOT RUN — branch has not been pushed
-- **Phase 03 status:** NOT AUTHORIZED / NOT STARTED
+- **Phase 01 merge status:** PR #1 merged to `main` as merge commit `cd9ffa7`
+- **Phase 02 status:** COMPLETE — implementation PASS, local verification PASS, independent
+  verification GO, merged to `main` as merge commit `d0c2f0f` (PR #2)
+- **Phase 02 remote CI:** workflow accepted but externally blocked by account Actions
+  budget/scheduler state; zero Phase 02 CI jobs materialized; normal and force cancellation
+  returned GitHub HTTP 500; no Phase 02 code-related CI failure observed
+- **Phase 03 status:** independent follow-up NO-GO after earlier independent FAIL (grounding)
+  and local re-verification PASS; failed-retry attempt accounting and equivalent-value
+  contradiction comparison are corrected locally. Independent verification is not PASS.
+- **Phase 04 status:** NOT AUTHORIZED / NOT STARTED
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record — 2026-08-18
@@ -1051,10 +1063,308 @@ Docker from repository root:
 - `docker compose down` — PASS
 - `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
 
-Independent follow-up verification remains pending. Phase 02 remote CI is not claimed because this
-branch has not been pushed.
+### Phase 02 closure — 2026-08-19
+
+- Implementation: **PASS**
+- Local verification: **PASS**
+- Independent verification: **GO** (PASS_WITH_CHANGES, zero critical findings; requested
+  corrections implemented and re-verified locally)
+- Merged to `main` as `d0c2f0f` (`Merge pull request #2 from Rahul9214/feat/phase-02-ingestion-provenance`)
+
+Remote GitHub Actions: the workflow was accepted but externally blocked by account Actions
+budget/scheduler state. Zero Phase 02 CI jobs materialized. Normal and force cancellation
+returned GitHub HTTP 500. No Phase 02 code-related CI failure was observed. GitHub billing was
+not treated as an implementation defect.
+
+## Phase 03 record — 2026-08-19
+
+### Scope completed
+
+Implemented grounded Understand only:
+
+- Alembic revision `20260819_0003` for `analysis_runs`, `facts`, `contradictions`, and
+  `stage_events`, all corpus-scoped;
+- taxonomy `software-project-assurance.v1` as configuration, not corpus-filename special-casing;
+- model boundary: `MODEL_PROVIDER=deterministic` by default (keyless) plus one OpenAI-compatible
+  live adapter selected by environment, with bounded timeout/retry and safe `ModelError`
+  translation;
+- LangGraph Understand workflow with real conditional skips:
+  load → retrieve → classify → extract → validate provenance → detect contradictions → finalize;
+- every supported fact bound to a Phase 02 citation that already passed exact provenance
+  validation; retrieval IDs recorded but not treated as evidence;
+- unknown inspection fields persisted as `support_status=unknown` /
+  `normalized_value=INSUFFICIENT_EVIDENCE`;
+- deterministic contradictions for the same category and subject key with incompatible values;
+- document prompt-injection classified as `untrusted_instruction` and not followed as policy;
+- inspectable analysis-run APIs; and
+- application version `0.3.0`, phase `Phase 03 — Understand`.
+
+Examine, item-level human review, durable kill/resume, MCP business operations, watching,
+incremental updates, register publication, and production deployment were not implemented.
+
+### Runtime and dependency decisions
+
+- Default `MODEL_PROVIDER=deterministic` requires no API key. The live path is OpenAI-compatible
+  chat completions via `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`, timeout, and retries.
+  No secrets were committed.
+- httpx **0.28.1** moved from a development-only dependency to a main dependency for the live
+  adapter. The deterministic adapter remains the executable-evidence path.
+- LangGraph **1.2.11** now executes the Understand graph. The PostgreSQL checkpointer remains
+  locked and unused. Human interrupt/resume is not implemented.
+- Frontend was not modified. Version/phase text continues to come from the API.
+
+### Cursor implementation verification — exact commands and final results
+
+Inspection:
+
+- `git branch --show-current` — `feat/phase-03-understand`
+- Read-only `git status` / `git log` — Phase 02 is on `main` as `d0c2f0f`; Phase 03 work remains
+  uncommitted on this branch
+- Agent Git write operations: none
+
+Backend final gate from `backend/` with
+`DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, and
+`ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- `uv sync --frozen --all-groups` — PASS; 91 packages
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 33 files
+- dedicated test-database Alembic `upgrade head` → `downgrade 20260819_0002` → `upgrade head` →
+  `current` — PASS; `20260819_0003 (head)`
+- `uv run pytest -m integration` — PASS; 20 passed
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 61 passed, **92.76%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.3.0`
+
+Frontend from `frontend/` (no source changes):
+
+- `npm ci` — PASS; 235 packages, 0 reported vulnerabilities
+- `npm run format:check` — PASS
+- `npm run lint` — PASS
+- `npm run typecheck` — PASS
+- initial `npm test` after the backend coverage run — FAIL; Vitest forks worker exited
+  unexpectedly, 0 tests executed (host load, no frontend source change)
+- sequential rerun `npx vitest run` — PASS; 1 file, 4 tests
+- `npm run build` — PASS
+
+Docker from repository root:
+
+- `docker compose config` — PASS
+- first combined `docker compose build` — FAIL; Docker credential helper
+  `Not enough memory resources are available to complete this operation`
+- sequential `docker compose build backend` then `docker compose build frontend` — PASS;
+  backend image installed `project-assurance-register==0.3.0`
+- cached rerun `docker compose build` — PASS
+- `docker compose up --build --detach` — PASS; all three services healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 — PASS
+- frontend HTTP 200 and `/api/ready` 200 — PASS
+- `docker compose exec backend alembic current` — PASS; `20260819_0003 (head)`
+- Aurora ingest + `POST /analysis-runs` — PASS; status `completed`, findings `populated`,
+  production-readiness contradiction `2026-10-30` vs `2026-11-14` with both citations,
+  `budget_owner` unknown, injection classified `untrusted_instruction`, stage cost `$0` /
+  `zero_deterministic`
+- Harbor ingest + Understand — PASS; different people/dates (`Tomas Reed`,
+  `legacy_retirement=2026-12-04`); `production_readiness` unknown; no Aurora leakage
+- Harbor corpus + Aurora run id — HTTP 404 `analysis_run_not_found`
+- empty corpus Understand — PASS; `findings_status=no_findings`, `no_findings=true`;
+  retrieve/classify/extract skipped
+- `docker compose down` — PASS
+- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+
+### Understand evidence
+
+- Classification uses taxonomy categories plus `untrusted_instruction`. Aurora Docker smoke
+  classified 23 blocks including `untrusted_instruction`; Harbor did not.
+- Supported facts require a validated Phase 02 citation. Tests reject malformed/unsupported
+  model citations instead of promoting them.
+- Aurora contradiction: `conflicting_dates` for `production_readiness` `2026-10-30` vs
+  `2026-11-14`, both cited. Matching repeated `2026-10-30` values are not labeled a
+  contradiction.
+- Unknown inspection fields include `budget_owner` on both corpora, `legacy_retirement` on
+  Aurora, and `production_readiness` on Harbor.
+- Prompt-injection paragraph in Aurora `decision-log.txt` is classified not-relevant and does
+  not produce a supported compliant/approval fact.
+- Harbor is a different result set without Aurora names/dates and without corpus-filename
+  branching.
+- Stage events persist per executed/skipped stage with duration, model-operation count, and
+  honest deterministic cost basis.
+
+### Failures encountered
+
+- PowerShell does not accept `&&`; commands were run sequentially.
+- Docker Desktop was initially stopped; `docker compose up -d db` was used after a `--detach`
+  / host-memory failure.
+- Full `pytest -m integration` once hit host `MemoryError` during failure reporting; isolated
+  reruns and the later official coverage run passed 61/61.
+- Accidental overwrite of `understand_service.py` with test content was restored before the
+  recorded gates.
+- mypy required `cast` around LangGraph `ainvoke` and numeric conversions.
+- Ruff E501 on the injection fixture string was wrapped across two source lines (still one TXT
+  paragraph).
+- Combined frontend `npm test` under load hit the same Vitest worker-exit class as Phase 02;
+  sequential rerun passed.
+- Combined `docker compose build` failed once on credential-helper OOM; sequential then cached
+  combined build passed.
+
+### Security verification
+
+- No key, credential, personal information, resume, employer/NDA data, or private source was
+  added. `.env.example` documents `OPENAI_API_KEY` as uncommitted.
+- Model errors do not include the API key. Default tests/Compose use `MODEL_PROVIDER=deterministic`.
+- Source text is wrapped as untrusted evidence and cannot redefine provenance or approve
+  compliance.
+- Cross-corpus analysis-run lookups return not found without traceback.
+- Destructive integration cleanup still requires the exact disposable database
+  `project_assurance_test`, a different application database name, and
+  `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`.
+
+### Phase 03 limitations
+
+- Understand runs synchronously in the API process. There is no worker queue, PostgreSQL
+  checkpointer, or kill/resume.
+- The live OpenAI-compatible adapter is implemented but is not the executable-evidence path.
+- Taxonomy inspection fields and extraction patterns are generic; they are not a full
+  rules-as-data Examine engine.
+- Contradiction detection is deterministic same-key incompatibility, not model-judged
+  semantic conflict.
+- No-findings is an Understand-level empty/unknown result, not an Examine clean-corpus
+  finding over versioned rules.
+- Frontend remains the Phase 01 status shell.
+- Database-level mutation-prevention triggers or restricted roles are still not implemented.
+- No internet-facing authentication/authorization or production hardening is claimed.
+
+Independent verification of Phase 03 found FAIL. Corrections and local re-verification follow.
+Do not begin Phase 04 without separate explicit authorization. Candidate owns Git writes.
+
+## Independent Phase 03 verification — FAIL — 2026-08-19
+
+Independent verification: **FAIL**
+
+Critical finding: a valid-but-unrelated citation could previously support a fabricated assertion.
+Citation resolution proved only that quoted text exists. It did not prove that the proposed
+category, subject_key, and normalized_value were supported by that quote.
+
+Related gaps: retrieval IDs were recorded but classification used all loaded blocks; injection
+exclusion depended on the adapter/model; skipped stages were not always persisted; fact/contradiction
+integrity and logical-vs-attempt model counts were incomplete; the deterministic adapter was easy
+to over-claim as general extraction.
+
+This FAIL record is retained. Corrections follow; they do not replace this result.
+
+### Root cause
+
+`validate_provenance` persisted `SUPPORTED` after `Phase02Service.validate_citation` succeeded,
+copying the model's category/subject/value unchanged. A live model could attach any valid citation
+to an invented assertion.
+
+### Exact fix
+
+- Shared taxonomy `derive_assertions` / extraction rules drive both the deterministic adapter and
+  `app.grounding.validate_assertion`.
+- Pipeline: proposal → citation resolver → resolved quote → assertion-to-evidence check →
+  `SUPPORTED` only on match. Failures become rejected assertions with safe reason codes.
+- Injection text is forced to `untrusted_instruction` after classify, excluded from extract, and
+  rejected if still proposed.
+- Classification uses retrieved candidate IDs; empty retrieval on a non-empty corpus records
+  `retrieval_mode=fallback_full_corpus`.
+- Migration `20260819_0003` adds fact/source-block corpus FK, supported-provenance check,
+  contradiction run/corpus FKs, canonical pair uniqueness, `skip_reason`, and `model_attempt_count`.
+- Canonical stages are always recorded; skipped stages have zero model operations and zero cost.
+
+### Local re-verification of FAIL corrections — PASS — 2026-08-19
+
+Inspection: `feat/phase-03-understand`; no agent Git writes.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` — PASS
+- test-database Alembic: stamp `20260819_0002` after leftover 0003 objects, then
+  `0002 → 0003 → 0002 → 0003`, `current = 20260819_0003 (head)` — PASS
+- `uv run pytest -m integration` — PASS; 25 passed
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 71 passed, **92.93%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.3.0`
+
+Frontend from `frontend/` (no source changes for this correction):
+
+- `npm run format:check` / `lint` / `typecheck` — PASS
+- `npm test` — PASS; 4 tests
+- `npm run build` — PASS via `cmd /c` after a paging-file failure; `dist/` produced
+
+Docker from repository root:
+
+- `docker compose config` — PASS
+- sequential `docker compose build backend` then `docker compose build frontend` — PASS
+  (combined frontend build previously crashed Docker/Go with `signal 0xc0000005` / paging file)
+- `docker compose up --build --detach` — PASS; database, backend, and frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 — PASS
+- frontend HTTP 200 and `/api/ready` 200 — PASS
+- first `docker compose exec backend alembic current` — `20260819_0003 (head)` while the persistent
+  volume still had the **old** 0003 columns (same revision ID edited in place)
+- recovery: drop leftover `analysis_runs`/`facts`/`contradictions`/`stage_events`,
+  `alembic stamp 20260819_0002`, `alembic upgrade head` — PASS; `model_attempt_count`,
+  `skip_reason`, `ck_facts_supported_requires_provenance`, `uq_source_blocks_id_corpus`,
+  `fk_facts_source_block_corpus` present; `current = 20260819_0003 (head)`
+- Aurora Understand on already-ingested corpus — PASS; `completed`/`populated`;
+  `production_readiness` `2026-10-30` vs `2026-11-14` `conflicting_dates`; `Elena Marlow`;
+  `budget_owner` unknown; injection `untrusted_instruction` / not relevant; no supported
+  compliant/approval fact; all seven canonical stages; `retrieval_mode=retrieved`; cost `$0`
+- Harbor Understand — PASS; `Tomas Reed`, `legacy_retirement=2026-12-04`; no Aurora leakage;
+  `production_readiness` unknown
+- Harbor corpus + Aurora run id — HTTP 404 `analysis_run_not_found`
+- empty corpus Understand — PASS; `findings_status=no_findings`; skipped load/retrieve/classify/
+  extract with `skip_reason=empty_corpus` and zero ops/cost
+- blank weather TXT Understand — PASS; `no_findings`; extract skipped `no_relevant_blocks`
+- `docker compose down` — PASS; named volumes retained
+- `docker compose ps --all` — PASS; no project containers
+- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+
+### Failures encountered during local re-verification
+
+- PowerShell does not accept `&&`; host CLR `80004005` and paging-file OOM required `cmd /c`
+  and sequential Docker builds.
+- Combined `uv run python` Docker smoke hung without reaching the API; curl against already
+  ingested corpora was used instead.
+- Persistent Compose volume remained on the pre-correction 0003 schema because the revision ID
+  was not bumped. `alembic current` reported head while `model_attempt_count` was missing.
+  Stamp-to-0002 plus drop leftover Phase 03 tables, then upgrade, restored the new schema
+  without re-ingesting PDFs.
+
+## Independent Phase 03 follow-up — NO-GO — 2026-08-19
+
+Independent follow-up: **NO-GO**
+
+The earlier grounding FAIL and its local re-verification remain. This follow-up does not replace
+that history and is not independent verification PASS.
+
+Blockers:
+
+- Failed retry paths recorded `model_attempt_count=1` in the graph instead of the provider attempts
+  actually made. Successful retry accounting was already correct.
+- Grounding trimmed and case-folded values, but contradiction grouping only case-folded them, so
+  equivalent grounded values such as `"green"` and `" green "` could be treated as contradictory.
+
+Fixes:
+
+- `ModelError.attempt_count` carries the actual provider attempts; the graph records that value
+  instead of hardcoding 1. `model_operation_count` remains 1 for one logical operation.
+- Shared `comparison_key` / `values_equivalent` in `taxonomy.py` (strip + casefold) used for
+  grounding, contradiction grouping, and repeated-value deduplication. Dates are not rewritten.
+- README documents skip reasons: `empty_corpus`, `no_relevant_blocks`,
+  `retrieval_empty_fallback`, `prior_stage_failed`.
+
+Local backend re-verification of this follow-up (not independent PASS):
+
+- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` — PASS
+- `uv run pytest tests/test_model_boundary.py tests/test_grounding.py tests/test_understand_integration.py`
+  — PASS; 36 passed
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 76 passed, **93.03%** (gate 90%)
+- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+- Frontend/Docker full-stack gates were not rerun; these corrections do not touch those areas.
 
 ## Current next safe step
 
-Independent follow-up verification of these Phase 02 corrections before any manual Git stage,
-commit, push, or pull-request action. Do not begin Phase 03 without separate explicit authorization.
+Complete candidate-owned Git writes on `feat/phase-03-understand` when ready.
+Independent verification remains NO-GO until a later follow-up. Do not begin Phase 04
+without separate explicit authorization.

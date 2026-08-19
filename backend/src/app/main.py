@@ -16,10 +16,12 @@ from app.db import (
     create_engine,
     create_session_factory,
 )
-from app.errors import NotFoundError, Phase02Error, ValidationError
+from app.errors import ModelError, NotFoundError, Phase02Error, ValidationError
+from app.model_gateway import ModelAdapter, create_model_adapter
 from app.request_limits import UploadRequestSizeGuard
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
+from app.understand_service import UnderstandService
 
 
 class HealthResponse(BaseModel):
@@ -37,6 +39,8 @@ def create_app(
     settings: Settings | None = None,
     readiness_probe: ReadinessProbe | None = None,
     phase02_service: Phase02Service | None = None,
+    understand_service: UnderstandService | None = None,
+    model_adapter: ModelAdapter | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
     engine = create_engine(app_settings)
@@ -51,12 +55,20 @@ def create_app(
             engine,
             app_settings.readiness_timeout_seconds,
         )
-        application.state.phase02_service = phase02_service or Phase02Service(
+        resolved_phase02 = phase02_service or Phase02Service(
             session_factory,
             LocalFileStorage(
                 app_settings.source_storage_path,
                 app_settings.max_upload_bytes,
             ),
+        )
+        adapter = model_adapter or create_model_adapter(app_settings)
+        application.state.phase02_service = resolved_phase02
+        application.state.understand_service = understand_service or UnderstandService(
+            resolved_phase02.session_factory,
+            resolved_phase02,
+            adapter,
+            app_settings,
         )
         yield
         await engine.dispose()
@@ -65,8 +77,9 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 02 deterministic corpus ingestion, exact provenance, and pgvector retrieval. "
-            "Agent reasoning and later workflows are not implemented."
+            "Phase 03 grounded Understand workflow over deterministic ingestion and provenance. "
+            "Examine, human review, durable resume, and MCP business operations "
+            "are not implemented."
         ),
         lifespan=lifespan,
     )
@@ -82,6 +95,8 @@ def create_app(
             status_code = 404
         elif isinstance(error, ValidationError):
             status_code = 413 if error.code == "upload_too_large" else 400
+        elif isinstance(error, ModelError):
+            status_code = 503
         return JSONResponse(
             status_code=status_code,
             content={

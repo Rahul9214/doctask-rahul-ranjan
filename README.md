@@ -2,28 +2,34 @@
 
 ## Current status
 
-**Phase 02 — Corpus, Ingestion, and Exact Provenance: implemented and locally verified.**
+**Phase 03 — Understand: local re-verification PASS after independent verification FAIL;
+independent follow-up NO-GO is retained.** Independent verification found that a valid but
+unrelated citation could previously support a fabricated assertion. Citation validity plus
+assertion-to-evidence validation is now required. A later follow-up found failed-retry attempt
+undercount and equivalent-value contradiction comparison; those corrections are in this tree.
+The independent FAIL and follow-up NO-GO records are retained in `PROGRESS.md`. Independent
+verification is not PASS.
 
-The repository now provides the deterministic grounded-data layer for Task 1:
+The repository now provides grounded Understand over the Phase 02 data layer:
 
 - corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
   application contract and API/service behavior;
-- bounded streamed upload, SHA-256 content addressing, logical-source deduplication, and mounted
-  durable local storage;
-- text-based PDF, DOCX paragraph/table, Markdown, and UTF-8 plain-text parsing;
-- deterministic format-native locators, conservative normalization, exact quote/span citation
-  validation, and source-byte tamper detection;
-- 64-dimensional deterministic keyless embeddings stored and queried through pgvector;
-- two reproducible fictional software-project-assurance corpora;
-- typed corpus, ingestion, inspection, citation, and retrieval APIs; and
-- all verified Phase 01 foundation capabilities.
+- bounded streamed upload, SHA-256 content addressing, exact citation validation, and pgvector retrieval;
+- a configurable model boundary (deterministic keyless adapter by default; one OpenAI-compatible live provider);
+- a LangGraph Understand workflow: load → retrieve candidate blocks → classify those candidates →
+  extract relevant blocks → citation resolver → assertion-to-evidence validation → contradictions →
+  finalize;
+- `AnalysisRun`, `Fact`, `Contradiction`, and `StageEvent` records with corpus isolation;
+- no-bluffing: supported facts require a valid citation **and** a deterministic check that the
+  asserted category, subject, and value are derivable from the cited quote; unknown fields and
+  rejected assertions are explicit; `untrusted_instruction` blocks are excluded from extraction; and
+- all verified Phase 01/02 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
-internet-facing production hardening are excluded.
+internet-facing production hardening remain excluded.
 
-**The Understand agent workflow is not implemented.** LangGraph business execution, LLM calls,
-fact/contradiction reasoning, Examine rules, human review, durable resume, MCP business operations,
-watching/incremental updates, and production deployment remain later-phase work.
+**Examine, item-level human review, durable kill/resume, MCP business operations, watching/incremental
+updates, register publication, and production deployment are not implemented.**
 
 ## Runtime and dependency baseline
 
@@ -41,7 +47,8 @@ Primary backend versions are locked in `backend/uv.lock`:
 
 - FastAPI 0.141.1, Pydantic 2.13.4, pydantic-settings 2.15.0
 - SQLAlchemy 2.0.52, asyncpg 0.31.0, Alembic 1.19.1
-- LangGraph 1.2.11 and langgraph-checkpoint-postgres 3.1.2 (locked but still unused)
+- LangGraph 1.2.11 (Understand workflow) and langgraph-checkpoint-postgres 3.1.2 (locked, unused)
+- httpx 0.28.1 (OpenAI-compatible live provider path)
 - pgvector 0.5.0 (used for SQLAlchemy `vector(64)` storage and cosine queries)
 - pypdf 6.16.1, python-docx 1.2.0, and python-multipart 0.0.32
 - MCP 2.0.0 (locked but no MCP server or business tools yet)
@@ -106,6 +113,10 @@ Important variables:
 - `READINESS_TIMEOUT_SECONDS`
 - `SOURCE_STORAGE_PATH` for host execution; Compose uses `/data/source-files`
 - `MAX_UPLOAD_BYTES`, default **10 MiB** and constrained to at most 100 MiB by settings
+- `MODEL_PROVIDER`, default `deterministic` (keyless). Set `openai` only with `OPENAI_API_KEY`
+- `OPENAI_MODEL`, `OPENAI_BASE_URL`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES`
+
+Do not commit `OPENAI_API_KEY`. The default Compose/test path requires no model key.
 
 Integration cleanup is denied before `TRUNCATE` unless the test URL names
 `project_assurance_test`, differs from the application database name, and the destructive-test
@@ -135,8 +146,9 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.2.0`, current Phase 02 metadata, and a truthful statement that
-deterministic ingestion/provenance is implemented while agent reasoning is not.
+Returns application version `0.3.0`, current Phase 03 metadata, and a truthful statement that
+grounded Understand is implemented while Examine, human review, durable resume, MCP business
+operations, and watching are not.
 
 ### Phase 02 corpus and source API
 
@@ -178,6 +190,34 @@ curl.exe --fail -X POST `
   -F "declared_format=txt" `
   -F "file=@backend/fixtures/corpora/aurora-control-hub/decision-log.txt;type=text/plain" `
   "http://localhost:8000/corpora/$($corpus.id)/sources"
+```
+
+### Phase 03 Understand API
+
+- `POST /corpora/{corpus_id}/analysis-runs` — run Understand synchronously
+- `GET /corpora/{corpus_id}/analysis-runs/{run_id}`
+- `GET /corpora/{corpus_id}/analysis-runs/{run_id}/facts`
+- `GET /corpora/{corpus_id}/analysis-runs/{run_id}/contradictions`
+- `GET /corpora/{corpus_id}/analysis-runs/{run_id}/understanding`
+- `GET /corpora/{corpus_id}/analysis-runs/{run_id}/stage-events`
+
+Every operation is corpus-scoped. Cross-corpus run lookups return not found. Supported facts include
+a Phase 02 citation that has already passed exact provenance validation **and** assertion-to-evidence
+validation against the resolved quote. Unknown inspection fields use `support_status=unknown` and
+`normalized_value=INSUFFICIENT_EVIDENCE`. Retrieval selected context is classified; it is not itself
+evidence. If retrieval returns no candidates for a non-empty corpus, Understand records
+`retrieval_mode=fallback_full_corpus` and classifies a bounded full-corpus set.
+
+Default execution uses `MODEL_PROVIDER=deterministic` and records zero external model cost.
+`model_operation_count` is logical model operations; `model_attempt_count` is provider HTTP attempts.
+Skipped stages persist `status=skipped` with `model_operation_count=0`, `model_attempt_count=0`,
+and `estimated_cost_usd=0`. Implemented skip reasons: `empty_corpus`, `no_relevant_blocks`,
+`retrieval_empty_fallback`, and `prior_stage_failed`.
+
+```powershell
+$run = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/corpora/$($corpus.id)/analysis-runs"
+Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/analysis-runs/$($run.id)/understanding"
 ```
 
 ### Normalization and exact provenance
@@ -303,9 +343,9 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.2.0`,
-`Phase 02 — Ingestion and Provenance`, the implemented deterministic data-layer scope, and the
-absence of agent reasoning. The existing frontend remains a dependency/status shell.
+All three services should report healthy. `/version` should report application version `0.3.0`,
+`Phase 03 — Understand`, grounded Understand, and the absence of Examine/review/resume/MCP watching.
+The existing frontend remains a dependency/status shell.
 
 ## CI
 
@@ -319,18 +359,22 @@ No deployment workflow exists.
 
 ## Security posture
 
-- No real secrets or API keys are required or committed.
-- Database settings use `SecretStr`; readiness errors expose controlled messages, not driver text.
+- No real secrets or API keys are required or committed. `OPENAI_API_KEY` is optional and only used
+  when `MODEL_PROVIDER=openai`.
+- Database settings use `SecretStr`; readiness and model errors expose controlled messages, not
+  driver text, source content, or credentials.
+- Document text is stored and indexed as untrusted data; it is never an instruction or evidence
+  merely because a vector query returned it. Source sentences that attempt to override instructions
+  are classified as data and cannot disable provenance or fabricate compliance.
+- Citation validation rejects wrong hashes, locators, spans, quotes, tampered bytes, missing
+  versions, persisted-block tampering, and cross-corpus lookups by reparsing original bytes.
+  Model output cannot override that validator.
 - Upload size is bounded; client filenames cannot provide path components; storage keys are
   generated; partial staging files are removed on failure.
 - Upload protection is an HTTP request-size guard plus a streamed file-content bound; requests
   without usable `Content-Length` rely on streaming enforcement.
 - PDF signature/text extraction and DOCX ZIP structure, entry count, expanded size, per-entry size,
   and compression ratio are checked before successful ingestion.
-- Document text is stored and indexed as untrusted data; it is never an instruction or evidence
-  merely because a vector query returned it.
-- Citation validation rejects wrong hashes, locators, spans, quotes, tampered bytes, missing
-  versions, persisted-block tampering, and cross-corpus lookups by reparsing original bytes.
 - Supported/common malformed-input classes exercised by the test suite return controlled
   cause/remedy errors. Exhaustive malformed-input containment is not claimed.
 - `.env`, virtual environments, dependency directories, coverage, build output, runtime database
@@ -355,10 +399,19 @@ No deployment workflow exists.
   edge cases require later reconciliation, and cleanup failures are best-effort.
 - The API has no internet-facing authentication/authorization layer; corpus identity is the current
   isolation boundary.
-- Phase 03 reasoning and all later workflow capabilities remain absent.
+- The live OpenAI-compatible path is optional; executable evidence uses the deterministic adapter.
+  That adapter is a compact rule/regex Software Project Assurance extractor with intentionally
+  limited linguistic coverage. It is not general-purpose semantic reasoning. All provider output,
+  including the live path, still passes citation resolution and assertion-to-evidence validation.
+  Live-path cost is reported as unavailable unless a pricing snapshot is added later.
+- Contradiction detection is deterministic over supported facts that share category and subject key.
+  Subtle semantic conflicts outside that contract are not claimed.
+- Examine, human review, durable resume, MCP business operations, watching, and register
+  publication remain unimplemented.
+- LangGraph PostgreSQL checkpoint/interrupt behavior is not used in Phase 03.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01/02 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–03 architecture and later-phase plans

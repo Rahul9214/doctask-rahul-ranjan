@@ -2,14 +2,15 @@
 
 ## Status
 
-**Phase 01 foundation and Phase 02 deterministic ingestion/provenance layer are implemented.**
+**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, and Phase 03 Understand are implemented. Independent Phase 03 verification FAIL is retained: supported facts now require citation validity plus assertion-to-evidence validation. Local re-verification of that correction PASS.**
 
 The executable system now includes corpus-scoped application-immutable source metadata, mounted source-file
 storage, streamed hashing, PDF/DOCX/Markdown/TXT parsers, normalized source blocks, exact citation
-resolution, and deterministic pgvector retrieval. Register records, agent graphs, model calls,
-human review, MCP business tools, durable workflow resume, incremental updates, and the watcher
-remain planned. Implementation evidence may simplify or revise those plans; revisions are recorded
-in `PROGRESS.md`.
+resolution, deterministic pgvector retrieval, a model boundary with a keyless deterministic adapter,
+and a LangGraph Understand workflow that persists grounded facts, contradictions, unknowns, and
+stage events. Register publication, Examine rules, human review, MCP business tools, durable
+workflow resume, incremental updates, and the watcher remain planned. Implementation evidence may
+simplify or revise those plans; revisions are recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -44,7 +45,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01/02 runtime
+## Implemented Phase 01–03 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -52,30 +53,30 @@ The current runtime boundary is deliberately small:
 flowchart LR
     Browser[ReactStatusShell] -->|/api/*| Nginx[Nginx]
     Nginx --> API[FastAPI]
-    API --> Services[Phase02Services]
-    Services --> DB[(PostgreSQL17_pgvector)]
-    Services --> Store[MountedSourceStore]
+    API --> P2[Phase02Services]
+    API --> P3[UnderstandService]
+    P3 --> Graph[LangGraphUnderstand]
+    Graph --> Model[ModelAdapter]
+    P2 --> DB[(PostgreSQL17_pgvector)]
+    P3 --> DB
+    P2 --> Store[MountedSourceStore]
     Alembic[AlembicStartupMigration] --> DB
 ```
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
-- FastAPI owns liveness/readiness/version plus corpus, source, citation, and retrieval routes.
+- FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, and Understand
+  analysis-run routes.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
-- SQLAlchemy creates an async engine/session factory during application lifespan and provides
-  corpus-scoped Phase 02 services.
-- Alembic revision `20260819_0001` enables `vector`; revision `20260819_0002` creates `corpora`,
-  `sources`, `source_versions`, and `source_blocks`, including `vector(64)` and HNSW cosine index.
+- SQLAlchemy creates an async engine/session factory during application lifespan.
+- Alembic revision `20260819_0001` enables `vector`; `20260819_0002` creates corpus/source tables;
+  `20260819_0003` creates `analysis_runs`, `facts`, `contradictions`, and `stage_events`.
 - Compose orders startup by health: database, migrating backend, then frontend.
-- PostgreSQL and source bytes use separate named persistent volumes. No Redis, queue, or
-  additional service exists.
-- Phase 02 actively uses pgvector's Python package for `vector(64)` persistence and retrieval.
-  LangGraph, its PostgreSQL checkpointer, and MCP remain locked but unused.
-
-Supported/common parser and driver failures exercised by tests expose controlled errors. Exhaustive
-malformed-input containment and parser isolation are not claimed. The configured database URL is
-represented as a Pydantic `SecretStr`, and no model/API key is required.
+- Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
+  OpenAI-compatible chat completions, selected only by environment.
+- LangGraph executes Understand stages with real conditional skips. The PostgreSQL checkpointer and
+  MCP remain locked but unused. Human interrupt/resume is not implemented.
 
 ## Implemented Phase 02 data layer
 
@@ -184,7 +185,8 @@ Implemented now:
 
 - stream bounded uploads to durable file storage;
 - create/inspect corpora, logical sources, immutable versions, and blocks;
-- validate exact citations and run corpus-scoped deterministic retrieval.
+- validate exact citations and run corpus-scoped deterministic retrieval;
+- create and inspect Understand analysis runs, facts, contradictions, and stage events.
 
 Later planned responsibilities:
 
@@ -195,31 +197,59 @@ Later planned responsibilities:
 - serve immutable source snippets/locators safely; and
 - return truthful failure states with cause and remedy.
 
-### LangGraph worker
+### LangGraph Understand workflow
 
-Planned responsibilities:
+Implemented in-process for Phase 03 (not a separate worker, and not PostgreSQL-checkpointed):
 
-- execute visible stateful stages;
-- use persisted checkpoints;
-- make conditional retry/skip/escalation decisions;
-- interrupt at `WAITING_FOR_REVIEW`;
-- resume only after valid explicit decisions exist; and
-- record stage outcomes and usage before advancing.
+```mermaid
+flowchart TD
+    StartNode[RunCreated] --> Load[LoadLatestBlocks]
+    Load --> Retrieve[RetrieveContextPgvector]
+    Retrieve -->|"empty_nonempty_corpus"| Fallback[FallbackFullCorpus]
+    Retrieve -->|"candidates"| Classify[ClassifyRetrievedBlocks]
+    Fallback --> Classify
+    Classify --> Extract[ExtractRelevantBlocks]
+    Extract --> Validate[CitationThenAssertionToEvidence]
+    Validate --> Conflict[DetectDeterministicContradictions]
+    Conflict --> Done[FinalizePersistedUnderstanding]
+```
+
+Skipped conceptual stages still persist `StageEvent` rows (`empty_corpus`, `no_relevant_blocks`,
+`retrieval_empty_fallback`, `prior_stage_failed`).
+
+- Retrieval selects candidate context and records block IDs. Classification runs only on those
+  candidates. Empty retrieval on a non-empty corpus records `retrieval_mode=fallback_full_corpus`
+  and classifies a bounded full-corpus set. Retrieval is not evidence.
+- Classification does not default every block to relevant. Injection-like source text is forced to
+  `untrusted_instruction` / not relevant after the model returns, excluded from extraction, and
+  rejected if a provider still proposes a fact from it.
+- Every supported fact must pass the Phase 02 citation resolver **and** a deterministic
+  assertion-to-evidence check against the freshly resolved quote (category, subject_key,
+  normalized_value, and source_block_id). Vector similarity is not evidence.
+- Unknown configured inspection fields become `unknown` / `INSUFFICIENT_EVIDENCE`.
+- Contradictions are emitted only for the same category and subject key with incompatible values,
+  using canonical fact-id ordering within the same run and corpus.
+- Canonical stages are always inspectable. Skipped stages persist `status=skipped` with a reason
+  (`empty_corpus`, `no_relevant_blocks`, `retrieval_empty_fallback`, `prior_stage_failed`),
+  `model_operation_count=0`, and `estimated_cost_usd=0`. `model_operation_count` is logical;
+  `model_attempt_count` is provider HTTP attempts.
+
+Durable kill/resume, human interrupt, and Examine stages remain planned.
 
 ### PostgreSQL with pgvector
 
-Implemented now: corpus/source/version/block metadata, composite corpus constraints, deterministic
-vectors, HNSW indexing, and metadata-filtered retrieval.
+Implemented now: corpus/source/version/block metadata, analysis runs, facts, contradictions, stage
+events, composite corpus constraints, fact-to-source-block corpus FK, supported-fact provenance
+check, contradiction run/corpus composite FKs with canonical pair uniqueness, deterministic vectors,
+HNSW indexing, and metadata-filtered retrieval.
 
 Later planned responsibilities:
 
-- durable run state and LangGraph checkpoints;
-- run/job claiming and attempt records;
+- LangGraph checkpoints and durable job claiming;
 - idempotency keys and operation results;
-- extracted facts, contradictions, rules, findings, and citations;
-- proposed change sets and human decisions;
+- rules, findings, proposed change sets, and human decisions;
 - published register versions and item hashes; and
-- append-only stage, usage, and change-attribution events.
+- append-only change-attribution events.
 
 pgvector assists retrieval recall. It is not evidence and cannot satisfy provenance.
 
@@ -270,12 +300,16 @@ Implemented in Phase 02:
 - `SourceBlock`: format-native locator, normalized text/span, metadata, and required deterministic
   embedding.
 
+Implemented in Phase 03:
+
+- `AnalysisRun`: corpus-scoped Understand execution, provider mode, taxonomy/graph versions,
+  status, error, and inspectable result payload.
+- `Fact`: typed assertion with support status, optional exact citation, and source block id.
+- `Contradiction`: incompatible supported facts with both sides cited.
+- `StageEvent`: stage name, timing, model operation count, token/cost fields, and failure state.
+
 Planned for later phases:
 
-- `Run`: corpus, trigger, state, checkpoint/thread identity, and status.
-- `StageEvent`: decision, attempt, outcome, timing, usage, and error/remedy.
-- `Fact`: typed extracted assertion with source citations and support status.
-- `Contradiction`: incompatible assertions with every side cited.
 - `RuleSet` and `Rule`: user-supplied versioned examination configuration.
 - `Finding`: rule result, severity/rationale, and source/register locations.
 - `RegisterItem`: stable assurance item with canonical serialized content.
@@ -382,18 +416,24 @@ The register version is immutable. Before a deliverable-grounded finding is trea
 
 ## Understand movement
 
-Planned stages:
+Implemented stages:
 
-1. classify document type and relevance;
-2. plan entities/fact types to inspect from domain configuration;
-3. retrieve candidate blocks using metadata/entity filters plus pgvector;
-4. extract typed facts with citations;
-5. validate schema and exact grounding;
-6. cluster compatible assertions;
-7. emit contradictions when materially incompatible assertions remain; and
-8. draft stable register items or explicit unsupported gaps.
+1. load latest source versions for the corpus;
+2. retrieve candidate blocks with taxonomy queries through pgvector (context only);
+3. classify **only retrieved candidates** (or a recorded bounded full-corpus fallback);
+4. extract atomic facts from classified-relevant blocks through the model boundary;
+5. validate every proposed citation with the Phase 02 resolver, then run deterministic
+   assertion-to-evidence validation on the resolved quote;
+6. emit configured inspection fields as UNKNOWN / INSUFFICIENT_EVIDENCE when unsupported;
+7. detect contradictions only among supported facts that share category and subject key; and
+8. persist an inspectable run with facts, contradictions, rejections, skipped-stage events, and
+   retrieval mode.
 
-Configuration defines document types, assurance areas, fact schemas, and normalization rules. Avoid corpus-name conditionals and one-off fixture logic.
+Taxonomy `software-project-assurance.v1` is configuration, not corpus-name logic. Categories include
+project identity, owner/accountability, milestone/date, status, risk, decision, dependency, and
+control/assurance. Document prompt-injection text is untrusted evidence.
+
+Examine, register drafting, and human review remain later phases.
 
 ## Examine movement
 
@@ -467,7 +507,10 @@ Planned behavior 9 and additional idempotency evidence:
 
 ## Trust boundaries and prompt-injection defense
 
-Document prompt-injection defense is planned behavior 8: **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
+Document prompt-injection defense is behavior 8. Phase 03 implements the Understand-level
+treatment: source text is wrapped as untrusted evidence, cannot redefine system behavior, cannot
+disable provenance, and cannot mark the project compliant. Full tool-call/self-approval defense
+remains later because those operations do not exist yet.
 
 Trust order:
 
@@ -493,7 +536,9 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 
 ## No-bluffing and failure semantics
 
-- Supported claims require at least one valid exact citation.
+- Supported claims require a valid exact citation **and** a deterministic assertion-to-evidence
+  match (category, subject_key, normalized_value, and source_block_id) against the resolved quote.
+  A valid-but-unrelated citation is not sufficient.
 - Unsupported claims remain explicit and cannot be rendered as sourced facts.
 - Contradictory evidence remains visible until a human decision; it is not silently reconciled.
 - `COMPLETED` requires a durable published version, applied-decision audit, and successful provenance/hash verification.
@@ -506,35 +551,20 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 
 ## Observability and cost
 
-Behavior 10 is planned as a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Its proposed durable stage event records:
-
-- stage and branch;
-- start/end timestamps and elapsed duration;
-- attempt/retry count;
-- input/output token counts when available;
-- model/provider name when used;
-- pricing snapshot/basis when configured;
-- estimated cost or honest `unavailable`;
-- idempotency/cache reuse; and
-- safe error class plus remedy.
-
-An elaborate observability UI is optional. The durable data and minimal timeline/report remain prioritized Behavior 10 targets rather than part of the explicit five-behavior floor.
-
-Measurement must state the method before results, report variance and tail values such as p95/max, and state limitations. Raw measurement data will be committed to the repository.
+Behavior 10 remains a strong differentiator. Phase 03 persists durable `StageEvent` rows with stage
+name, start/end/duration, skip reason when skipped, logical `model_operation_count`, provider
+`model_attempt_count`, token fields when available, estimated cost or honest `zero_deterministic` /
+`unavailable`, and failure state. No observability UI exists.
 
 ## Keyless test architecture
 
-Behavior 7 is planned as a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
-
-If Behavior 7 is retained, a deterministic model adapter supplies controlled structured responses only at the model boundary while tests still use:
-
-- real document parsers and provenance validators;
-- real LangGraph transitions and interrupts;
-- real PostgreSQL/pgvector in containers;
-- real worker subprocess kill/restart;
-- real concurrent workers/transactions;
-- real FastAPI and MCP transport contracts; and
-- actual canonical serialization/hash comparisons.
+Behavior 7 remains a strong differentiator. Phase 03 implements a keyless deterministic adapter:
+a compact rule/regex Software Project Assurance extractor with intentionally limited linguistic
+coverage. It is not general-purpose semantic reasoning. The live OpenAI-compatible provider remains
+separately configurable. Every provider output still passes citation resolution and
+assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 citation validator, the
+grounding validator, LangGraph Understand transitions, PostgreSQL/pgvector, and FastAPI. Worker
+kill/resume, concurrency publication, and MCP transport remain later.
 
 Fixtures must include:
 
