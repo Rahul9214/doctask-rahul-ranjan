@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import ReviewPanel from "./ReviewPanel";
+
 interface VersionInfo {
   app_version: string;
   current_phase: string;
@@ -98,10 +100,11 @@ export default function App() {
   return (
     <main className="shell">
       <section className="panel" aria-labelledby="page-title">
-        <p className="eyebrow">Development foundation</p>
+        <p className="eyebrow">Human review</p>
         <h1 id="page-title">Project Assurance Register</h1>
         <p className="scope-message">
-          Task 1 business workflow is not implemented yet.
+          Understand, Examine, and item-level human review are implemented.
+          Register publication, durable resume, MCP, and watching are not.
         </p>
 
         <div className="status-card" aria-live="polite">
@@ -153,6 +156,8 @@ export default function App() {
             </>
           )}
         </div>
+
+        {status.kind === "ready" && <ReviewPanel />}
       </section>
     </main>
   );

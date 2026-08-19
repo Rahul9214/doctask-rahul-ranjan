@@ -2,21 +2,18 @@
 
 ## Status
 
-**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, and
-Phase 04 Examine are implemented.** Independent Phase 03 FAIL (grounding) and follow-up NO-GO
-remain historical record. Phase 03 current status is independent final follow-up GO: committed,
-PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 local initial implementation PASS;
-independent verification FAIL / NO-GO; correction in progress. Examine consumes grounded Phase 03
-records and revalidates Phase 02 provenance before persisting definitive findings.
+**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, Phase 04
+Examine, and Phase 05 item-level human review are implemented.** Independent Phase 03 FAIL
+(grounding) and follow-up NO-GO remain historical record. Phase 03 current status is independent
+final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 local
+initial implementation PASS; independent verification FAIL / NO-GO remains historical. Examine
+consumes grounded Phase 03 records and revalidates Phase 02 provenance before persisting definitive
+findings. Human review creates an explicit `WAITING_FOR_REVIEW` session from a completed examination
+and records item-level approve/reject/edit decisions without publishing a register.
 
-The executable system now includes corpus-scoped application-immutable source metadata, mounted source-file
-storage, streamed hashing, PDF/DOCX/Markdown/TXT parsers, normalized source blocks, exact citation
-resolution, deterministic pgvector retrieval, a model boundary with a keyless deterministic adapter,
-a LangGraph Understand workflow that persists grounded facts, contradictions, unknowns, and
-stage events, and a LangGraph Examine workflow that persists versioned-rule findings and stage
-events. Register publication, human review, MCP business tools, durable workflow resume,
-incremental updates, and the watcher remain planned. Implementation evidence may simplify or
-revise those plans; revisions are recorded in `PROGRESS.md`.
+Register publication, MCP business tools, durable workflow resume, incremental updates, and the
+watcher remain planned. Implementation evidence may simplify or revise those plans; revisions are
+recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -57,31 +54,34 @@ The current runtime boundary is deliberately small:
 
 ```mermaid
 flowchart LR
-    Browser[ReactStatusShell] -->|/api/*| Nginx[Nginx]
+    Browser[ReactStatusAndReview] -->|/api/*| Nginx[Nginx]
     Nginx --> API[FastAPI]
     API --> P2[Phase02Services]
     API --> P3[UnderstandService]
     API --> P4[ExamineService]
+    API --> P5[ReviewService]
     P3 --> Graph[LangGraphUnderstand]
     P4 --> ExamineGraph[LangGraphExamine]
     Graph --> Model[ModelAdapter]
     P2 --> DB[(PostgreSQL17_pgvector)]
     P3 --> DB
     P4 --> DB
+    P5 --> DB
     P2 --> Store[MountedSourceStore]
     Alembic[AlembicStartupMigration] --> DB
 ```
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
 - FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
-  analysis-run, and Examine examination-run routes.
+  analysis-run, Examine examination-run, and human-review routes.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
 - SQLAlchemy creates an async engine/session factory during application lifespan.
 - Alembic revision `20260819_0001` enables `vector`; `20260819_0002` creates corpus/source tables;
   `20260819_0003` creates `analysis_runs`, `facts`, `contradictions`, and `stage_events`;
-  `20260819_0004` creates `examination_runs`, `findings`, and `examination_stage_events`.
+  `20260819_0004` creates `examination_runs`, `findings`, and `examination_stage_events`;
+  `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
@@ -197,12 +197,15 @@ Implemented now:
 - create/inspect corpora, logical sources, immutable versions, and blocks;
 - validate exact citations and run corpus-scoped deterministic retrieval;
 - create and inspect Understand analysis runs, facts, contradictions, and stage events;
-- create and inspect Examine runs, findings, summaries, and stage events.
+- create and inspect Examine runs, findings, summaries, and stage events;
+- create and inspect review sessions, enumerate review items with grounded evidence, record
+  explicit item-level approve/reject/edit decisions under row-level transactional locking, and
+  complete a session only after required items have terminal decisions.
 
 Later planned responsibilities:
 
-- expose pending review items and explicit item-level decision operations;
 - resume workflows after accepted human decisions;
+- publish approved-only register versions;
 - serve immutable source snippets/locators safely; and
 - return truthful failure states with cause and remedy.
 
@@ -295,7 +298,6 @@ Later planned responsibilities:
 
 - LangGraph checkpoints and durable job claiming;
 - idempotency keys and operation results;
-- proposed change sets and human decisions;
 - published register versions and item hashes; and
 - append-only change-attribution events.
 
@@ -310,16 +312,17 @@ artifacts. Object storage is not required for the acceptance target.
 
 ### React review UI
 
-Only essential review behavior is planned:
+Phase 05 implements a minimal review panel in the existing React/TypeScript shell:
 
-- run and stage timeline;
-- proposed register changes, contradictions, and findings;
-- exact source evidence view;
-- individual approve/reject controls in one review;
-- explicit submit action by a real human; and
-- status/resume and published-result view.
+- open or reuse a review session from corpus and examination-run identifiers;
+- list review items with outcome, severity, reason, and grounded citations;
+- show pending/approved/rejected/edited state and session counts;
+- submit explicit APPROVE, REJECT, and confirmed reviewer-authored EDIT, sending
+  `reviewer_authored_acknowledged=true` for edits;
+- disable completion until every required item has a terminal decision;
+- loading, error, and pending-request states without stack traces.
 
-Rich editing, visual polish, and elaborate observability dashboards are optional cuts.
+Rich document editing, stage timelines, and observability dashboards remain later.
 
 ### Chosen MCP server
 
@@ -365,6 +368,17 @@ Implemented in Phase 04:
 - `ExaminationStageEvent`: Examine stage name, timing, rule-evaluation count, zero deterministic
   cost, skip reason, and failure state.
 
+Implemented in Phase 05:
+
+- `ReviewSession`: corpus-scoped review over one completed examination run. Status is
+  `waiting_for_review` until an explicit complete call. One session per examination. Counts cover
+  required pending plus approved/rejected/edited totals. Session creation never implies approval.
+- `ReviewItem`: one finding snapshot with review-required mapping (FAIL/WARNING/UNKNOWN required;
+  PASS optional), original proposed content, current status, and optional reviewer-authored edit.
+- `ReviewDecision`: append-only approve/reject/edit record with previous/new status, original
+  proposal snapshot, edited content when applicable, explicit reviewer-authored acknowledgement,
+  actor/source, comment, and timestamp. Decision writes lock the session then the item.
+
 Rules live in versioned application configuration (`software-project-assurance.v1`), not a
 user-upload table. A user-supplied rule editor is not implemented.
 
@@ -372,7 +386,6 @@ Planned for later phases:
 
 - `RegisterItem`: stable assurance item with canonical serialized content.
 - `ChangeSet` and `ChangeItem`: immutable proposals and their before/after hashes.
-- `ReviewDecision`: human actor, item, approve/reject decision, optional reason, and timestamp.
 - `RegisterVersion`: published version and ordered item hashes.
 - `IdempotencyRecord`: operation key, durable status, and prior result.
 
@@ -410,15 +423,23 @@ Visible stage events must record the selected branch and reason. Retry is bounde
 
 ## Human gate state machine
 
-The required demonstrated path is:
+The implemented Phase 05 path is:
 
 ```text
-PROPOSING
-→ WAITING_FOR_REVIEW
-→ real human inspects each item
-→ human explicitly approves/rejects individual items
-→ decisions submitted through UI/API/MCP operation
-→ READY_TO_RESUME
+completed examination
+→ create immutable review session (WAITING_FOR_REVIEW)
+→ human or machine inspects each item and its grounded evidence
+→ explicit approve / reject / edit per item
+→ SELECT session FOR UPDATE; decisions also lock the target item
+→ append-only decision history; latest valid state is current
+→ recompute session counts from item rows in the same transaction
+→ complete only when every required item has a terminal decision
+```
+
+Register publication remains later:
+
+```text
+READY_TO_RESUME
 → APPLYING_APPROVED_ITEMS
 → VERIFYING
 → COMPLETED
@@ -426,14 +447,14 @@ PROPOSING
 
 Rules:
 
-- A proposal set is immutable once presented.
-- Review submission includes the proposal-set version to prevent stale decisions.
-- Every actionable item in the presented review set requires an explicit decision before resume. Mixed approval/rejection is required; unresolved items cannot be silently treated as approved or rejected.
-- One submission can contain approvals and rejections.
-- Rejected items remain in audit history but do not alter the published register.
-- The proposing agent has no operation that implicitly self-approves.
-- React and MCP/API use the same decision validation and publication path.
-- Success is returned only after approved changes are durable and the published version passes verification.
+- A proposal set is immutable once presented (`proposal_set_version`).
+- Review-required items are FAIL, WARNING, and UNKNOWN findings. PASS items are visible and optional.
+- Generation never auto-approves. Pending required items block completion.
+- Mixed approval/rejection/edit is allowed. Rejecting one item does not discard sibling decisions.
+- Edited reviewer text is marked reviewer-authored and is not treated as system-grounded evidence.
+- Phase 03/04 records are not mutated by review.
+- React and API use the same decision validation. MCP is not implemented.
+- Publication of approved-only register versions is not implemented.
 
 ## Exact provenance
 

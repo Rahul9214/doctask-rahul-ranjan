@@ -110,7 +110,7 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("always states that Task 1 business workflow is not implemented", () => {
+  it("states the current implemented review scope", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => undefined)),
@@ -119,7 +119,9 @@ describe("App", () => {
     render(<App />);
 
     expect(
-      screen.getByText("Task 1 business workflow is not implemented yet."),
+      screen.getByText(
+        "Understand, Examine, and item-level human review are implemented. Register publication, durable resume, MCP, and watching are not.",
+      ),
     ).toBeInTheDocument();
   });
 });

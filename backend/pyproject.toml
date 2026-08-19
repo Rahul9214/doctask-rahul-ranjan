@@ -1,7 +1,7 @@
 [project]
 name = "project-assurance-register"
-version = "0.4.0"
-description = "Grounded Examine workflow for the Project Assurance Register"
+version = "0.5.0"
+description = "Human review gate over grounded Examine findings for the Project Assurance Register"
 requires-python = "==3.13.*"
 dependencies = [
     "alembic==1.19.1",

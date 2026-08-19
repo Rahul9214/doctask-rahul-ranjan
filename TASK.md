@@ -10,18 +10,20 @@ Do not implement Task 2, Task 3, Task 4, or extra credit. Task 4 video/write-up/
 
 ## Current implementation state
 
-Phases 01, 02, 03, and 04 implement and locally verify the development foundation, the deterministic
-grounded-data layer, the Understand movement, and the Examine movement: corpus-scoped source
-versions/blocks that are immutable by application contract, streamed SHA-256 ingestion,
-PDF/DOCX/Markdown/TXT parsers, normalized blocks, exact citation validation, local file storage,
-deterministic pgvector retrieval, a configurable model boundary with a keyless deterministic
-adapter, a LangGraph Understand workflow, classification, grounded fact extraction, contradiction
-detection, unknown/insufficient-evidence representation, inspectable analysis-run APIs, a versioned
-assurance ruleset, a LangGraph Examine workflow, and inspectable examination-run APIs.
+Phases 01, 02, 03, 04, and 05 implement and locally verify the development foundation, the
+deterministic grounded-data layer, the Understand movement, the Examine movement, and the item-level
+human review gate: corpus-scoped source versions/blocks that are immutable by application contract,
+streamed SHA-256 ingestion, PDF/DOCX/Markdown/TXT parsers, normalized blocks, exact citation
+validation, local file storage, deterministic pgvector retrieval, a configurable model boundary with
+a keyless deterministic adapter, a LangGraph Understand workflow, classification, grounded fact
+extraction, contradiction detection, unknown/insufficient-evidence representation, inspectable
+analysis-run APIs, a versioned assurance ruleset, a LangGraph Examine workflow, inspectable
+examination-run APIs, explicit review sessions/items/decisions with row-level transactional locking
+and authoritative count recomputation, explicit edit acknowledgement, and a minimal review UI.
 Database-level mutation-prevention triggers or restricted roles are not implemented.
 
-MCP business server, watcher, human-review flow, durable workflow resume, incremental processing,
-register publication, and a full measurement system are not implemented yet.
+MCP business server, watcher, durable workflow resume, incremental processing, register publication,
+and a full measurement system are not implemented yet.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -284,7 +286,7 @@ Additional qualities to retain where possible:
 The final evidence suite must prove the five explicit floor behaviors:
 
 - [ ] visible stage decisions and conditional retry/skip/escalation paths;
-- [ ] a real human supplies mixed item-level approve/reject decisions;
+- [x] a real human supplies mixed item-level approve/reject decisions;
 - [ ] only approved items are published;
 - [ ] a killed real worker process resumes without lost or duplicated completed work;
 - [ ] the machine interface drives the full flow and exposes explicit item-level review operations; and
