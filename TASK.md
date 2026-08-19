@@ -10,15 +10,17 @@ Do not implement Task 2, Task 3, Task 4, or extra credit. Task 4 video/write-up/
 
 ## Current implementation state
 
-Phases 01 and 02 implement and locally verify the development foundation plus the deterministic
-grounded-data layer: corpus-scoped source versions/blocks that are immutable by application
-contract, streamed SHA-256 ingestion, PDF/DOCX/Markdown/TXT parsers, normalized blocks, exact
-citation validation, local file storage, and deterministic pgvector retrieval. Database-level
-mutation-prevention triggers or restricted roles are not implemented.
+Phases 01, 02, and 03 implement and locally verify the development foundation, the deterministic
+grounded-data layer, and the Understand movement: corpus-scoped source versions/blocks that are
+immutable by application contract, streamed SHA-256 ingestion, PDF/DOCX/Markdown/TXT parsers,
+normalized blocks, exact citation validation, local file storage, deterministic pgvector retrieval,
+a configurable model boundary with a keyless deterministic adapter, a LangGraph Understand workflow,
+classification, grounded fact extraction, contradiction detection, unknown/insufficient-evidence
+representation, and inspectable analysis-run APIs. Database-level mutation-prevention triggers or
+restricted roles are not implemented.
 
-No fact/contradiction/register schema, LangGraph business graph, model gateway, Examine workflow,
-MCP business server, watcher, human-review flow, durable workflow resume, incremental processing,
-or measurement system is implemented yet.
+Examine workflow, MCP business server, watcher, human-review flow, durable workflow resume,
+incremental processing, register publication, and a full measurement system are not implemented yet.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -292,14 +294,14 @@ The final evidence suite must prove the five explicit floor behaviors:
 Understand, examine, and stay alive must each be genuinely represented. The current plan targets:
 
 - [x] mixed-format ingestion and deterministic declared-format validation;
-- [ ] document classification reasoning;
-- [ ] surfaced contradictions with all sides cited;
-- [ ] a clean, fully evaluated corpus returns an honest no-findings result;
+- [x] document classification reasoning;
+- [x] surfaced contradictions with all sides cited;
+- [x] a clean, fully evaluated corpus returns an honest no-findings result;
 - [ ] changing a rule/domain configuration changes behavior without a code rewrite;
 - [ ] new content triggers focused incremental processing;
 - [ ] change history answers what changed, when, and because of which source;
 - [ ] incremental proof compares affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes; and
-- [ ] a second different corpus succeeds without corpus-specific code changes.
+- [x] a second different corpus succeeds without corpus-specific code changes.
 
 A cut inside these movement details is allowed only with explicit rationale while preserving a genuine minimum of each movement.
 

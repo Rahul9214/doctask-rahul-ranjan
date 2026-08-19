@@ -119,3 +119,100 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+
+
+class AnalysisRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    status: str
+    findings_status: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    model_provider_mode: str
+    model_name: str
+    taxonomy_version: str
+    graph_version: str
+    error_code: str | None
+    error_detail: str | None
+    created_at: datetime
+
+
+class FactResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    run_id: UUID
+    corpus_id: UUID
+    category: str
+    subject_key: str
+    normalized_value: str
+    confidence: float
+    support_status: str
+    rejection_reason: str | None
+    citation: CitationRequest | None
+    source_block_id: UUID | None
+    created_at: datetime
+
+
+class ContradictionResponse(BaseModel):
+    id: UUID
+    run_id: UUID
+    corpus_id: UUID
+    contradiction_type: str
+    reason: str
+    confidence: float
+    status: str
+    fact_a: FactResponse
+    fact_b: FactResponse
+    created_at: datetime
+
+
+class StageEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    run_id: UUID
+    corpus_id: UUID
+    stage_name: str
+    started_at: datetime
+    completed_at: datetime | None
+    duration_ms: int | None
+    model_operation_count: int
+    model_attempt_count: int = 0
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost_usd: float | None
+    cost_basis: str
+    status: str
+    error_code: str | None
+    skip_reason: str | None = None
+
+
+class BlockClassificationResponse(BaseModel):
+    source_block_id: UUID
+    relevant: bool
+    category: str | None
+    confidence: float
+    rationale: str | None = None
+
+
+class RejectedAssertionResponse(BaseModel):
+    category: str
+    subject_key: str
+    normalized_value: str
+    reason: str
+    citation: CitationRequest | None = None
+
+
+class UnderstandingResponse(BaseModel):
+    run: AnalysisRunResponse
+    no_findings: bool
+    retrieval_mode: str | None = None
+    classifications: list[BlockClassificationResponse]
+    retrieved_block_ids: list[UUID]
+    rejected_assertions: list[RejectedAssertionResponse]
+    facts: list[FactResponse]
+    contradictions: list[ContradictionResponse]
+    stage_events: list[StageEventResponse]

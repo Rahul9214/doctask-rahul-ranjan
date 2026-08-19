@@ -24,3 +24,18 @@ class ParserError(Phase02Error):
 
 class ProvenanceError(Phase02Error):
     pass
+
+
+class ModelError(Phase02Error):
+    def __init__(
+        self,
+        code: str,
+        detail: str,
+        action: str,
+        *,
+        retryable: bool = False,
+        attempt_count: int | None = None,
+    ) -> None:
+        super().__init__(code, detail, action)
+        self.retryable = retryable
+        self.attempt_count = attempt_count

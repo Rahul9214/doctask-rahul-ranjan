@@ -74,10 +74,11 @@ def test_version_is_truthful_about_phase_scope() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "app_version": "0.2.0",
-        "current_phase": "Phase 02 — Ingestion and Provenance",
+        "app_version": "0.3.0",
+        "current_phase": "Phase 03 — Understand",
         "implementation_status": (
-            "Deterministic corpus ingestion, exact provenance, and pgvector retrieval are "
-            "implemented; agent reasoning is not implemented."
+            "Grounded Understand is implemented: classification, fact extraction, exact "
+            "provenance validation, contradiction detection, and no-bluffing; Examine, human "
+            "review, durable resume, MCP business operations, and watching are not implemented."
         ),
     }

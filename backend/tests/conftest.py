@@ -34,7 +34,10 @@ async def phase02_service(
     engine = create_engine(Settings(database_url=SecretStr(database_url)))
     async with engine.begin() as connection:
         await connection.execute(
-            text("TRUNCATE source_blocks, source_versions, sources, corpora CASCADE")
+            text(
+                "TRUNCATE contradictions, facts, stage_events, analysis_runs, "
+                "source_blocks, source_versions, sources, corpora CASCADE"
+            )
         )
     storage = LocalFileStorage(tmp_path / "sources", max_upload_bytes=10 * 1024 * 1024)
     service = Phase02Service(create_session_factory(engine), storage)
@@ -43,6 +46,9 @@ async def phase02_service(
     finally:
         async with engine.begin() as connection:
             await connection.execute(
-                text("TRUNCATE source_blocks, source_versions, sources, corpora CASCADE")
+                text(
+                    "TRUNCATE contradictions, facts, stage_events, analysis_runs, "
+                    "source_blocks, source_versions, sources, corpora CASCADE"
+                )
             )
         await engine.dispose()

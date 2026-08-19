@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFil
 
 from app.parsers import SourceFormat
 from app.schemas import (
+    AnalysisRunResponse,
     CitationRequest,
     CitationValidationResponse,
+    ContradictionResponse,
     CorpusCreate,
     CorpusResponse,
+    FactResponse,
     IngestionResponse,
     SearchRequest,
     SearchResponse,
@@ -17,8 +20,11 @@ from app.schemas import (
     SourceResponse,
     SourceSummaryResponse,
     SourceVersionResponse,
+    StageEventResponse,
+    UnderstandingResponse,
 )
 from app.services import Phase02Service
+from app.understand_service import UnderstandService
 
 router = APIRouter()
 
@@ -27,7 +33,12 @@ def get_phase02_service(request: Request) -> Phase02Service:
     return cast(Phase02Service, request.app.state.phase02_service)
 
 
+def get_understand_service(request: Request) -> UnderstandService:
+    return cast(UnderstandService, request.app.state.understand_service)
+
+
 Service = Annotated[Phase02Service, Depends(get_phase02_service)]
+Understand = Annotated[UnderstandService, Depends(get_understand_service)]
 
 
 @router.post("/corpora", response_model=CorpusResponse, status_code=status.HTTP_201_CREATED)
@@ -141,3 +152,67 @@ async def search_blocks(
             for match in matches
         ]
     )
+
+
+@router.post(
+    "/corpora/{corpus_id}/analysis-runs",
+    response_model=AnalysisRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_analysis_run(corpus_id: UUID, understand: Understand) -> AnalysisRunResponse:
+    return AnalysisRunResponse.model_validate(await understand.create_run(corpus_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/analysis-runs/{run_id}",
+    response_model=AnalysisRunResponse,
+)
+async def get_analysis_run(
+    corpus_id: UUID, run_id: UUID, understand: Understand
+) -> AnalysisRunResponse:
+    return AnalysisRunResponse.model_validate(await understand.get_run(corpus_id, run_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/analysis-runs/{run_id}/facts",
+    response_model=list[FactResponse],
+)
+async def get_analysis_facts(
+    corpus_id: UUID, run_id: UUID, understand: Understand
+) -> list[FactResponse]:
+    return [
+        FactResponse.model_validate(fact) for fact in await understand.list_facts(corpus_id, run_id)
+    ]
+
+
+@router.get(
+    "/corpora/{corpus_id}/analysis-runs/{run_id}/contradictions",
+    response_model=list[ContradictionResponse],
+)
+async def get_analysis_contradictions(
+    corpus_id: UUID, run_id: UUID, understand: Understand
+) -> list[ContradictionResponse]:
+    return await understand.list_contradiction_responses(corpus_id, run_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/analysis-runs/{run_id}/understanding",
+    response_model=UnderstandingResponse,
+)
+async def get_understanding(
+    corpus_id: UUID, run_id: UUID, understand: Understand
+) -> UnderstandingResponse:
+    return await understand.get_understanding(corpus_id, run_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/analysis-runs/{run_id}/stage-events",
+    response_model=list[StageEventResponse],
+)
+async def get_analysis_stage_events(
+    corpus_id: UUID, run_id: UUID, understand: Understand
+) -> list[StageEventResponse]:
+    return [
+        StageEventResponse.model_validate(event)
+        for event in await understand.list_stage_events(corpus_id, run_id)
+    ]
