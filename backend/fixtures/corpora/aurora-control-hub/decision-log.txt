@@ -1,0 +1,11 @@
+Aurora Control Hub Decision Log
+
+Decision D-008
+Date: 2026-08-11
+Owner: Elena Marlow
+Outcome: Keep the production readiness baseline at 2026-10-30 until the steering review.
+
+Decision D-009
+Date: 2026-08-15
+Owner: Dev Shah
+Outcome: Use the existing identity test tenant for integration testing.

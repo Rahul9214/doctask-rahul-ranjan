@@ -31,6 +31,7 @@ frontend/coverage/
 *.sqlite3
 postgres-data/
 tmp/
+backend/var/
 
 # IDE and OS caches
 .idea/

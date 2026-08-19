@@ -2,13 +2,14 @@
 
 ## Status
 
-**Phase 01 foundation implemented; Task 1 business architecture remains planned.**
+**Phase 01 foundation and Phase 02 deterministic ingestion/provenance layer are implemented.**
 
-The executable foundation now includes a FastAPI process, environment settings, async SQLAlchemy
-engine/session setup, Alembic, PostgreSQL 17 with pgvector, a React status shell, container topology,
-tests, and CI. No document, register, graph, model, human-review, MCP business-tool, resume,
-incremental-update, or watcher behavior described below exists yet. Implementation evidence may
-simplify or revise the planned design; any revision must be recorded in `PROGRESS.md`.
+The executable system now includes corpus-scoped application-immutable source metadata, mounted source-file
+storage, streamed hashing, PDF/DOCX/Markdown/TXT parsers, normalized source blocks, exact citation
+resolution, and deterministic pgvector retrieval. Register records, agent graphs, model calls,
+human review, MCP business tools, durable workflow resume, incremental updates, and the watcher
+remain planned. Implementation evidence may simplify or revise those plans; revisions are recorded
+in `PROGRESS.md`.
 
 ## Design goals
 
@@ -43,7 +44,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01 foundation
+## Implemented Phase 01/02 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -51,26 +52,107 @@ The current runtime boundary is deliberately small:
 flowchart LR
     Browser[ReactStatusShell] -->|/api/*| Nginx[Nginx]
     Nginx --> API[FastAPI]
-    API -->|readiness query only| DB[(PostgreSQL17_pgvector)]
+    API --> Services[Phase02Services]
+    Services --> DB[(PostgreSQL17_pgvector)]
+    Services --> Store[MountedSourceStore]
     Alembic[AlembicStartupMigration] --> DB
 ```
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
-- FastAPI owns liveness, readiness, and version/phase metadata only.
+- FastAPI owns liveness/readiness/version plus corpus, source, citation, and retrieval routes.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
-- SQLAlchemy creates an async engine and session factory during application lifespan and disposes
-  the engine during shutdown. No business repository or model exists.
-- Alembic revision `20260819_0001` enables `vector`; it creates no Task 1 business tables.
+- SQLAlchemy creates an async engine/session factory during application lifespan and provides
+  corpus-scoped Phase 02 services.
+- Alembic revision `20260819_0001` enables `vector`; revision `20260819_0002` creates `corpora`,
+  `sources`, `source_versions`, and `source_blocks`, including `vector(64)` and HNSW cosine index.
 - Compose orders startup by health: database, migrating backend, then frontend.
-- PostgreSQL data uses a named persistent volume. No Redis, queue, or additional service exists.
-- LangGraph, its PostgreSQL checkpointer, pgvector's Python package, and MCP are locked for future
-  compatibility but are not imported or used by Phase 01 business code.
+- PostgreSQL and source bytes use separate named persistent volumes. No Redis, queue, or
+  additional service exists.
+- Phase 02 actively uses pgvector's Python package for `vector(64)` persistence and retrieval.
+  LangGraph, its PostgreSQL checkpointer, and MCP remain locked but unused.
 
-The Phase 01 trust boundary exposes controlled readiness details rather than database driver
-messages. The configured database URL is represented as a Pydantic `SecretStr`, and no model/API key
-is required.
+Supported/common parser and driver failures exercised by tests expose controlled errors. Exhaustive
+malformed-input containment and parser isolation are not claimed. The configured database URL is
+represented as a Pydantic `SecretStr`, and no model/API key is required.
+
+## Implemented Phase 02 data layer
+
+### Records and constraints
+
+- `Corpus` is the isolation and declared-format boundary.
+- `Source` is unique by `(corpus_id, logical_name)`.
+- `SourceVersion` is unique by `(source_id, sha256)`, has a globally unique generated storage key,
+  and redundantly carries `corpus_id` under a composite source/corpus foreign key.
+- `SourceBlock` is unique by version/block index and version/native locator and carries a composite
+  version/corpus foreign key.
+- Version and block mutation endpoints do not exist. Changed bytes create another version; exact
+  duplicate bytes for one logical source return the existing version.
+- `SourceVersion` and `SourceBlock` are immutable by application contract and API/service behavior.
+  Database UPDATE/DELETE prevention triggers and restricted mutation roles are not implemented.
+- No Fact, Contradiction, Finding, Rule, ChangeSet, ReviewDecision, RegisterVersion, run, or
+  checkpoint business table was created.
+
+### Ingestion/storage transaction
+
+```mermaid
+flowchart LR
+    Upload[UploadFile] --> Stage[UUIDStagingFile]
+    Stage -->|1MiB chunks| Hash[SHA256AndSizeBound]
+    Hash --> Validate[ExtensionMediaSignatureResourceChecks]
+    Validate --> Parse[DeterministicParser]
+    Parse --> Dedup[CorpusAndLogicalSourceDedup]
+    Dedup -->|duplicate| Existing[VerifyStoredHashAndReturnVersion]
+    Dedup -->|new bytes| Promote[AtomicGeneratedKeyPromotion]
+    Promote --> Tx[VersionAndBlocksTransaction]
+```
+
+The default maximum upload is 10 MiB. A request-level Content-Length guard allows 1 MiB for
+multipart overhead before normal multipart processing, while the streamed file-content bound
+remains authoritative. Missing/chunked Content-Length cannot be rejected by the first guard and
+relies on streaming enforcement.
+
+Keys use only UUIDs, SHA-256, and a server-selected extension:
+`corpus/source/hash-prefix/hash/version.ext`. Client filenames are metadata only and filenames with
+path separators, drive separators, or traversal components are rejected. In-process failures
+attempt staged/promoted-file cleanup.
+
+A crash after promotion but before database commit can leave an orphan. Cancellation edges require
+later reconciliation, and cleanup failures are best-effort. Transactional outbox/object-store
+reconciliation remains deferred with durable workflow recovery.
+
+DOCX ZIP validation bounds entry count (1,000), each expanded entry (20 MiB), total expanded size
+(50 MiB), and compression ratio (200:1). PDF parsing is text-only; no extractable blocks produces a
+typed `textless_pdf` failure and no OCR fallback.
+
+### Parser locator/normalization contract
+
+- PDF: `page[n]/block[n]`, where page number is one-based and parser block index is zero-based.
+- DOCX: `paragraph[n]` or
+  `table[n]/row[n]/cell[n]/paragraph[n]`, all deterministic document-order indexes.
+- Markdown/TXT: `lines[start-end]/block[n]`, with one-based inclusive source line ranges.
+
+Normalized block text uses LF line endings, Unicode NFC, regular spaces for NBSP, removed trailing
+whitespace on each line, and removed blank boundary lines. Interior line structure is retained.
+`normalized_start` is zero for a stored block and `normalized_end` is its PostgreSQL/Python
+character length. Citation spans are half-open offsets within that block.
+
+### Exact citation resolution
+
+Resolution order is source-version lookup scoped by corpus, source-file SHA-256 recalculation,
+citation SHA/format comparison, deterministic fresh parsing of the original bytes, native-locator
+lookup in that fresh parse, persisted-block integrity comparison, fresh span bounds check, and exact
+quote comparison. Source bytes are re-hashed after parsing to reduce the hash/parse race window.
+Missing/cross-corpus versions are not found. Persisted block text or a vector result cannot bypass
+this resolver.
+
+### Deterministic pgvector retrieval
+
+Source text tokens are case-folded and SHA-256 feature-hashed into 64 signed dimensions, then
+L2-normalized. PostgreSQL stores the vector and performs cosine-distance ordering under corpus plus
+optional format/block-type filters. Zero-token queries are rejected. This is deterministic lexical
+retrieval support for local tests, not a model gateway or semantic embedding claim.
 
 ## Planned system shape
 
@@ -98,10 +180,15 @@ Hosted deployment is not explicitly required by Task 1. Our minimum acceptance t
 
 ### FastAPI
 
-Planned responsibilities:
+Implemented now:
 
-- stream uploads to durable file storage;
-- create corpora, source versions, rules, and runs;
+- stream bounded uploads to durable file storage;
+- create/inspect corpora, logical sources, immutable versions, and blocks;
+- validate exact citations and run corpus-scoped deterministic retrieval.
+
+Later planned responsibilities:
+
+- create rules and runs;
 - expose run status and visible stage events;
 - expose pending review items and explicit item-level decision operations;
 - resume workflows after accepted human decisions;
@@ -121,13 +208,14 @@ Planned responsibilities:
 
 ### PostgreSQL with pgvector
 
-Planned responsibilities:
+Implemented now: corpus/source/version/block metadata, composite corpus constraints, deterministic
+vectors, HNSW indexing, and metadata-filtered retrieval.
 
-- durable application state and LangGraph checkpoints;
+Later planned responsibilities:
+
+- durable run state and LangGraph checkpoints;
 - run/job claiming and attempt records;
 - idempotency keys and operation results;
-- immutable source versions and block metadata;
-- vector embeddings plus deterministic metadata/entity filters;
 - extracted facts, contradictions, rules, findings, and citations;
 - proposed change sets and human decisions;
 - published register versions and item hashes; and
@@ -137,14 +225,10 @@ pgvector assists retrieval recall. It is not evidence and cannot satisfy provena
 
 ### Hash-addressed file store
 
-Planned responsibilities:
-
-- store streamed original uploads outside process memory;
-- key immutable source versions by SHA-256;
-- store normalized parser artifacts; and
-- make source content independently resolvable for citation validation.
-
-The initial local/container implementation may use a mounted volume behind a storage interface. Object storage is not required for the acceptance target.
+The implemented local/container adapter streams originals outside process memory, incorporates
+SHA-256 into generated version keys, uses a mounted named volume, and re-reads/reparses bytes for
+citation validation. Normalized blocks are stored in PostgreSQL rather than as duplicate filesystem
+artifacts. Object storage is not required for the acceptance target.
 
 ### React review UI
 
@@ -176,14 +260,18 @@ MCP exposes the gate but does not bypass it. The demonstrated path must not let 
 
 The minimum watcher polls a mounted directory, waits for file size/mtime stability, hashes content, and creates an idempotent source-arrival operation. A sophisticated event system is unnecessary unless executable evidence shows polling cannot satisfy focused incremental behavior.
 
-## Planned core records
+## Core records
 
-The initial schema should remain small and normalized around these concepts:
+Implemented in Phase 02:
 
 - `Corpus`: isolation boundary and declared domain/format policy.
 - `Source`: logical document identity.
 - `SourceVersion`: immutable content hash, storage key, parser status, and arrival time.
-- `SourceBlock`: format-native locator, normalized text/span, metadata, and optional embedding.
+- `SourceBlock`: format-native locator, normalized text/span, metadata, and required deterministic
+  embedding.
+
+Planned for later phases:
+
 - `Run`: corpus, trigger, state, checkpoint/thread identity, and status.
 - `StageEvent`: decision, attempt, outcome, timing, usage, and error/remedy.
 - `Fact`: typed extracted assertion with source citations and support status.
@@ -195,8 +283,6 @@ The initial schema should remain small and normalized around these concepts:
 - `ReviewDecision`: human actor, item, approve/reject decision, optional reason, and timestamp.
 - `RegisterVersion`: published version and ordered item hashes.
 - `IdempotencyRecord`: operation key, durable status, and prior result.
-
-Exact names may change after Phase 01/02 implementation. The required semantics may not.
 
 Every query and uniqueness rule must include the appropriate corpus, source, run, or register-version identity. Do not rely on process-local global state.
 
@@ -259,7 +345,7 @@ Rules:
 
 ## Exact provenance
 
-A source citation is planned as:
+The implemented source citation is:
 
 ```text
 source_version_id
@@ -277,7 +363,10 @@ Examples of native locators:
 - DOCX: paragraph or table/row/cell path;
 - Markdown/TXT: line range plus block index.
 
-The source version and normalized parser artifact are immutable. Before publication, a deterministic validator resolves every supported citation and confirms the locator/span yields the exact quote. Missing or mismatched evidence changes the claim to unsupported or blocks publication; the model cannot override this validator.
+The source version and normalized parser artifact are immutable by application contract. The
+Phase 02 resolver confirms stored bytes still hash correctly, reparses them, and checks that the
+fresh locator/span yields the exact quote and matches persisted block content. Later publication
+code must call this same deterministic boundary; a model cannot override it.
 
 For a finding grounded against the generated register/deliverable, the planned locator is:
 
@@ -462,12 +551,18 @@ Fixtures must include:
 ## Security and data handling
 
 - Fixtures and demonstrations use synthetic/public data only.
-- Uploads are streamed; file size/type limits and parser timeouts fail with a cause and remedy.
+- Uploads use a Content-Length request guard plus a streamed file-content bound; file type and DOCX
+  expansion checks cover the supported/tested cases with cause/remedy errors.
+- Parsers currently run in-process without a separate timeout/sandbox; this remains a documented
+  local-development limitation.
 - Source filenames and parser text are never treated as commands.
 - Secrets are environment-injected and redacted from logs/errors.
+- Integration `TRUNCATE` is guarded by a fixed disposable database name, a distinct application
+  database name, and an explicit destructive-test opt-in.
 - Corpus/run IDs scope every read/write.
 - Review decisions record a human actor and proposal version.
-- Immutable source and audit records are not overwritten.
+- Phase 02 source versions/blocks are not overwritten through application APIs/services; database
+  mutation-prevention triggers and restricted roles are absent.
 - No certification or guaranteed-redaction claim is made.
 
 ## Deliberate exclusions and cut order

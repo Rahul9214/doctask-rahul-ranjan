@@ -29,10 +29,14 @@ services:
       context: ./backend
     environment:
       APP_NAME: Project Assurance Register
-      APP_VERSION: 0.1.0
-      CURRENT_PHASE: Phase 01 — Development Foundation
+      APP_VERSION: 0.2.0
+      CURRENT_PHASE: Phase 02 — Ingestion and Provenance
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-project_assurance}:${POSTGRES_PASSWORD:-local_only}@db:5432/${POSTGRES_DB:-project_assurance}
+      SOURCE_STORAGE_PATH: /data/source-files
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
       READINESS_TIMEOUT_SECONDS: 5
+    volumes:
+      - source_files:/data/source-files
     init: true
     depends_on:
       db:
@@ -70,3 +74,4 @@ services:
 
 volumes:
   postgres_data:
+  source_files:

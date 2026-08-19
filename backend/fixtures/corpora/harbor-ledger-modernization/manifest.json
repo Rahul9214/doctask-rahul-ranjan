@@ -1,0 +1,32 @@
+{
+  "declared_formats": [
+    "pdf",
+    "docx",
+    "markdown",
+    "txt"
+  ],
+  "documents": [
+    {
+      "declared_format": "pdf",
+      "filename": "delivery-plan.pdf",
+      "logical_name": "Delivery Plan"
+    },
+    {
+      "declared_format": "docx",
+      "filename": "quality-update.docx",
+      "logical_name": "Quality Update"
+    },
+    {
+      "declared_format": "markdown",
+      "filename": "risk-register.md",
+      "logical_name": "Risk Register"
+    },
+    {
+      "declared_format": "txt",
+      "filename": "governance-notes.txt",
+      "logical_name": "Governance Notes"
+    }
+  ],
+  "domain": "software-project-assurance",
+  "name": "Harbor Ledger Modernization"
+}

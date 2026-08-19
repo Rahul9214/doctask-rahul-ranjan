@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,13 +16,18 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.1.0"
-    current_phase: str = "Phase 01 — Development Foundation"
-    implementation_status: str = "Task 1 business workflow is not implemented yet."
+    app_version: str = "0.2.0"
+    current_phase: str = "Phase 02 — Ingestion and Provenance"
+    implementation_status: str = (
+        "Deterministic corpus ingestion, exact provenance, and pgvector retrieval are implemented; "
+        "agent reasoning is not implemented."
+    )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
     )
     readiness_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    source_storage_path: Path = Path("var/source-files")
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0, le=100 * 1024 * 1024)
 
     def sqlalchemy_database_url(self) -> str:
         return self.database_url.get_secret_value()

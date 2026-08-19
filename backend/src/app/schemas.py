@@ -1,0 +1,121 @@
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.parsers import SUPPORTED_FORMATS, SourceFormat
+
+
+class ErrorResponse(BaseModel):
+    code: str
+    detail: str
+    action: str
+
+
+class CorpusCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    domain: str = Field(min_length=1, max_length=200)
+    declared_formats: list[SourceFormat] = Field(
+        default_factory=lambda: list(SUPPORTED_FORMATS),
+        min_length=1,
+    )
+
+    @field_validator("declared_formats")
+    @classmethod
+    def unique_formats(cls, formats: list[SourceFormat]) -> list[SourceFormat]:
+        return list(dict.fromkeys(formats))
+
+
+class CorpusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    domain: str
+    declared_formats: list[SourceFormat]
+    created_at: datetime
+
+
+class SourceVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    source_id: UUID
+    corpus_id: UUID
+    sha256: str
+    media_type: str
+    declared_format: SourceFormat
+    original_filename: str
+    storage_key: str
+    byte_size: int
+    parser_status: Literal["parsed"]
+    created_at: datetime
+
+
+class SourceSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    logical_name: str
+    created_at: datetime
+
+
+class SourceResponse(SourceSummaryResponse):
+    versions: list[SourceVersionResponse]
+
+
+class SourceBlockResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    source_version_id: UUID
+    corpus_id: UUID
+    block_index: int
+    block_type: str
+    native_locator: str
+    normalized_text: str
+    normalized_start: int
+    normalized_end: int
+    metadata: dict[str, object] = Field(validation_alias="block_metadata")
+
+
+class IngestionResponse(BaseModel):
+    source: SourceSummaryResponse
+    version: SourceVersionResponse
+    duplicate: bool
+    block_count: int
+
+
+class CitationRequest(BaseModel):
+    source_version_id: UUID
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    format: SourceFormat
+    native_locator: str = Field(min_length=1, max_length=255)
+    normalized_start: int = Field(ge=0)
+    normalized_end: int = Field(gt=0)
+    exact_quote: str = Field(min_length=1)
+
+
+class CitationValidationResponse(BaseModel):
+    valid: Literal[True] = True
+    source_version_id: UUID
+    source_block_id: UUID
+    resolved_quote: str
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2_000)
+    limit: int = Field(default=5, ge=1, le=20)
+    block_type: str | None = Field(default=None, max_length=50)
+    declared_format: SourceFormat | None = None
+
+
+class SearchResult(BaseModel):
+    block: SourceBlockResponse
+    score: float
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResult]

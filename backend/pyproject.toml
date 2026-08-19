@@ -1,7 +1,7 @@
 [project]
-name = "project-assurance-foundation"
-version = "0.1.0"
-description = "Phase 01 development foundation for the Project Assurance Register"
+name = "project-assurance-register"
+version = "0.2.0"
+description = "Deterministic ingestion and provenance for the Project Assurance Register"
 requires-python = "==3.13.*"
 dependencies = [
     "alembic==1.19.1",
@@ -13,6 +13,9 @@ dependencies = [
     "pgvector==0.5.0",
     "pydantic==2.13.4",
     "pydantic-settings==2.15.0",
+    "pypdf==6.16.1",
+    "python-docx==1.2.0",
+    "python-multipart==0.0.32",
     "sqlalchemy==2.0.52",
     "uvicorn[standard]==0.52.3",
 ]

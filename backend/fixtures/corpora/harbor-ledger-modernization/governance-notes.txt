@@ -1,0 +1,8 @@
+Harbor Ledger Modernization Governance Notes
+
+Meeting date: 2026-08-13
+Chair: Tomas Reed
+Decision: Retain the 2026-12-04 legacy retirement target.
+
+Action: Luca Bell will run the disaster-recovery rehearsal by 2026-09-02.
+Action: Priya Nwosu will confirm archive retention approval; no confirmation date is recorded.
