@@ -10,13 +10,15 @@ Do not implement Task 2, Task 3, Task 4, or extra credit. Task 4 video/write-up/
 
 ## Current implementation state
 
-Phase 01 implements and verifies the development foundation: FastAPI liveness/readiness/version
-metadata, environment settings, async SQLAlchemy/Alembic setup, PostgreSQL 17 with pgvector, a React
-status shell, local Compose deployment, tests, quality commands, and CI configuration.
+Phases 01 and 02 implement and locally verify the development foundation plus the deterministic
+grounded-data layer: corpus-scoped source versions/blocks that are immutable by application
+contract, streamed SHA-256 ingestion, PDF/DOCX/Markdown/TXT parsers, normalized blocks, exact
+citation validation, local file storage, and deterministic pgvector retrieval. Database-level
+mutation-prevention triggers or restricted roles are not implemented.
 
-No Task 1 business schema, document ingestion, LangGraph graph, pgvector retrieval, MCP server,
-watcher, model adapter, human-review flow, incremental processing, or measurement system is
-implemented yet.
+No fact/contradiction/register schema, LangGraph business graph, model gateway, Examine workflow,
+MCP business server, watcher, human-review flow, durable workflow resume, incremental processing,
+or measurement system is implemented yet.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -289,7 +291,8 @@ The final evidence suite must prove the five explicit floor behaviors:
 
 Understand, examine, and stay alive must each be genuinely represented. The current plan targets:
 
-- [ ] mixed-format classification and ingestion;
+- [x] mixed-format ingestion and deterministic declared-format validation;
+- [ ] document classification reasoning;
 - [ ] surfaced contradictions with all sides cited;
 - [ ] a clean, fully evaluated corpus returns an honest no-findings result;
 - [ ] changing a rule/domain configuration changes behavior without a code rewrite;

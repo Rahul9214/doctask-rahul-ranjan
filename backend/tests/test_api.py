@@ -74,7 +74,10 @@ def test_version_is_truthful_about_phase_scope() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "app_version": "0.1.0",
-        "current_phase": "Phase 01 — Development Foundation",
-        "implementation_status": "Task 1 business workflow is not implemented yet.",
+        "app_version": "0.2.0",
+        "current_phase": "Phase 02 — Ingestion and Provenance",
+        "implementation_status": (
+            "Deterministic corpus ingestion, exact provenance, and pgvector retrieval are "
+            "implemented; agent reasoning is not implemented."
+        ),
     }

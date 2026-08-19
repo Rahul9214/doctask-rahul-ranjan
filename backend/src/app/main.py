@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 from functools import partial
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.api import router as phase02_router
 from app.config import Settings, get_settings
 from app.db import (
     ReadinessProbe,
@@ -14,6 +16,10 @@ from app.db import (
     create_engine,
     create_session_factory,
 )
+from app.errors import NotFoundError, Phase02Error, ValidationError
+from app.request_limits import UploadRequestSizeGuard
+from app.services import Phase02Service
+from app.storage import LocalFileStorage
 
 
 class HealthResponse(BaseModel):
@@ -30,18 +36,27 @@ def create_app(
     *,
     settings: Settings | None = None,
     readiness_probe: ReadinessProbe | None = None,
+    phase02_service: Phase02Service | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
     engine = create_engine(app_settings)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        session_factory = create_session_factory(engine)
         application.state.engine = engine
-        application.state.session_factory = create_session_factory(engine)
+        application.state.session_factory = session_factory
         application.state.readiness_probe = readiness_probe or partial(
             check_dependencies,
             engine,
             app_settings.readiness_timeout_seconds,
+        )
+        application.state.phase02_service = phase02_service or Phase02Service(
+            session_factory,
+            LocalFileStorage(
+                app_settings.source_storage_path,
+                app_settings.max_upload_bytes,
+            ),
         )
         yield
         await engine.dispose()
@@ -49,9 +64,48 @@ def create_app(
     application = FastAPI(
         title=app_settings.app_name,
         version=app_settings.app_version,
-        description="Development foundation only; Task 1 business workflow is not implemented.",
+        description=(
+            "Phase 02 deterministic corpus ingestion, exact provenance, and pgvector retrieval. "
+            "Agent reasoning and later workflows are not implemented."
+        ),
         lifespan=lifespan,
     )
+    application.add_middleware(
+        UploadRequestSizeGuard,
+        max_upload_bytes=app_settings.max_upload_bytes,
+    )
+
+    @application.exception_handler(Phase02Error)
+    async def phase02_error_handler(_request: Request, error: Phase02Error) -> JSONResponse:
+        status_code = 422
+        if isinstance(error, NotFoundError):
+            status_code = 404
+        elif isinstance(error, ValidationError):
+            status_code = 413 if error.code == "upload_too_large" else 400
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "code": error.code,
+                "detail": error.detail,
+                "action": error.action,
+            },
+        )
+
+    @application.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        _request: Request, _error: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "code": "request_validation_error",
+                "detail": "The request fields or declared format are invalid.",
+                "action": (
+                    "Check the OpenAPI schema and use pdf, docx, markdown, or txt "
+                    "for declared_format."
+                ),
+            },
+        )
 
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
@@ -76,6 +130,7 @@ def create_app(
             implementation_status=app_settings.implementation_status,
         )
 
+    application.include_router(phase02_router)
     return application
 
 

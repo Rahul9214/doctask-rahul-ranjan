@@ -1,0 +1,32 @@
+{
+  "declared_formats": [
+    "pdf",
+    "docx",
+    "markdown",
+    "txt"
+  ],
+  "documents": [
+    {
+      "declared_format": "pdf",
+      "filename": "project-charter.pdf",
+      "logical_name": "Project Charter"
+    },
+    {
+      "declared_format": "docx",
+      "filename": "status-report.docx",
+      "logical_name": "Weekly Status Report"
+    },
+    {
+      "declared_format": "markdown",
+      "filename": "risk-register.md",
+      "logical_name": "Risk Register"
+    },
+    {
+      "declared_format": "txt",
+      "filename": "decision-log.txt",
+      "logical_name": "Decision Log"
+    }
+  ],
+  "domain": "software-project-assurance",
+  "name": "Aurora Control Hub"
+}

@@ -2,28 +2,28 @@
 
 ## Current status
 
-**Phase 01 — Development Foundation: implemented and verified.**
+**Phase 02 — Corpus, Ingestion, and Exact Provenance: implemented and locally verified.**
 
-This repository currently provides only the technical foundation for Task 1:
+The repository now provides the deterministic grounded-data layer for Task 1:
 
-- FastAPI application lifecycle and metadata;
-- database-independent `GET /health`;
-- PostgreSQL and pgvector-aware `GET /ready`;
-- truthful `GET /version` phase metadata;
-- environment-backed, secret-safe settings;
-- async SQLAlchemy engine/session setup;
-- Alembic with an initial pgvector extension migration;
-- a React/TypeScript status shell;
-- PostgreSQL 17 + pgvector, backend, and frontend containers;
-- backend/frontend quality tooling and tests; and
-- pull-request/push CI for `main`.
+- corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
+  application contract and API/service behavior;
+- bounded streamed upload, SHA-256 content addressing, logical-source deduplication, and mounted
+  durable local storage;
+- text-based PDF, DOCX paragraph/table, Markdown, and UTF-8 plain-text parsing;
+- deterministic format-native locators, conservative normalization, exact quote/span citation
+  validation, and source-byte tamper detection;
+- 64-dimensional deterministic keyless embeddings stored and queried through pgvector;
+- two reproducible fictional software-project-assurance corpora;
+- typed corpus, ingestion, inspection, citation, and retrieval APIs; and
+- all verified Phase 01 foundation capabilities.
 
-**Task 1 business workflow is not implemented yet.**
+OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
+internet-facing production hardening are excluded.
 
-The following remain planned for later phases and are not claimed here: document ingestion or
-parsing, Project Assurance Register business records, LangGraph execution, LLM calls, human
-review, durable resume, MCP business tools, incremental updates, a watcher, and production
-deployment.
+**The Understand agent workflow is not implemented.** LangGraph business execution, LLM calls,
+fact/contradiction reasoning, Examine rules, human review, durable resume, MCP business operations,
+watching/incremental updates, and production deployment remain later-phase work.
 
 ## Runtime and dependency baseline
 
@@ -35,17 +35,16 @@ deployment.
 - Docker image: `pgvector/pgvector:0.8.1-pg17-bookworm`
 
 Python 3.13 was selected instead of the host's Python 3.14 to retain broad wheel and runtime
-compatibility across FastAPI, SQLAlchemy, Alembic, asyncpg, LangGraph, PostgreSQL checkpointing,
-pgvector, MCP, and test tooling. uv installs the project runtime without changing the global Python
-installation.
+compatibility. uv installs the project runtime without changing the global Python installation.
 
 Primary backend versions are locked in `backend/uv.lock`:
 
 - FastAPI 0.141.1, Pydantic 2.13.4, pydantic-settings 2.15.0
 - SQLAlchemy 2.0.52, asyncpg 0.31.0, Alembic 1.19.1
-- LangGraph 1.2.11 and langgraph-checkpoint-postgres 3.1.2 (dependency only; unused in Phase 01)
-- pgvector 0.5.0 (dependency only; no vector business schema yet)
-- MCP 2.0.0 (dependency only; no MCP server or tools yet)
+- LangGraph 1.2.11 and langgraph-checkpoint-postgres 3.1.2 (locked but still unused)
+- pgvector 0.5.0 (used for SQLAlchemy `vector(64)` storage and cosine queries)
+- pypdf 6.16.1, python-docx 1.2.0, and python-multipart 0.0.32
+- MCP 2.0.0 (locked but no MCP server or business tools yet)
 - Uvicorn 0.52.3
 - Ruff 0.16.3, mypy 2.3.1, pytest 9.1.1, pytest-asyncio 1.4.0,
   pytest-cov 7.1.0, and HTTPX 0.28.1
@@ -67,8 +66,8 @@ From the repository root in PowerShell:
 docker compose up --build
 ```
 
-Compose creates a persistent PostgreSQL volume, waits for database health, applies Alembic
-migrations, starts the backend, and serves the built frontend through Nginx.
+Compose creates persistent PostgreSQL and source-file volumes, waits for database health, applies
+Alembic migrations, starts the backend, and serves the built frontend through Nginx.
 
 Open:
 
@@ -84,8 +83,8 @@ Stop the stack from another terminal:
 docker compose down
 ```
 
-`docker compose down` preserves the database volume. Use `docker compose down --volumes` only when
-you intentionally want to delete local database data.
+`docker compose down` preserves both volumes. Use `docker compose down --volumes` only when you
+intentionally want to delete local database and uploaded source data.
 
 ## Configuration
 
@@ -102,7 +101,15 @@ Important variables:
 - `BACKEND_PORT`
 - `FRONTEND_PORT`
 - `DATABASE_URL` for direct host-side backend commands
+- `TEST_DATABASE_URL`, which must name the dedicated `project_assurance_test` database
+- `ALLOW_DESTRUCTIVE_TEST_DATABASE`, which must explicitly be `true` before integration cleanup
 - `READINESS_TIMEOUT_SECONDS`
+- `SOURCE_STORAGE_PATH` for host execution; Compose uses `/data/source-files`
+- `MAX_UPLOAD_BYTES`, default **10 MiB** and constrained to at most 100 MiB by settings
+
+Integration cleanup is denied before `TRUNCATE` unless the test URL names
+`project_assurance_test`, differs from the application database name, and the destructive-test
+opt-in is `true`.
 
 The simple Compose path is local-development only. Its `POSTGRES_PASSWORD` must match
 `[A-Za-z0-9_]+` because Compose passes the same literal value to PostgreSQL and interpolates it
@@ -128,11 +135,77 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version, current phase, and:
+Returns application version `0.2.0`, current Phase 02 metadata, and a truthful statement that
+deterministic ingestion/provenance is implemented while agent reasoning is not.
 
-```text
-Task 1 business workflow is not implemented yet.
+### Phase 02 corpus and source API
+
+- `POST /corpora`
+- `GET /corpora/{corpus_id}`
+- `POST /corpora/{corpus_id}/sources` — multipart `logical_name`, `declared_format`, and `file`
+- `GET /corpora/{corpus_id}/sources`
+- `GET /corpora/{corpus_id}/sources/{source_id}`
+- `GET /corpora/{corpus_id}/source-versions/{version_id}`
+- `GET /corpora/{corpus_id}/source-versions/{version_id}/blocks`
+- `POST /corpora/{corpus_id}/citations/validate`
+- `POST /corpora/{corpus_id}/search`
+
+Every operation is corpus-scoped. Cross-corpus source/version/citation lookups return not found.
+Repeated identical bytes for one logical source return the existing version; changed bytes create
+a new version. `SourceVersion` and `SourceBlock` are immutable by application contract and
+API/service behavior. Database mutation-prevention triggers and restricted mutation roles are not
+implemented.
+
+The upload endpoint has two bounds: an HTTP request-size guard rejects a declared `Content-Length`
+above `MAX_UPLOAD_BYTES` plus 1 MiB of multipart overhead before normal multipart parsing, and the
+streamed file-content bound enforces `MAX_UPLOAD_BYTES` while reading `UploadFile`. If
+`Content-Length` is absent or transfer is chunked, only the authoritative streamed file-content
+bound applies.
+
+An example container-side TXT ingestion from the repository root:
+
+```powershell
+$corpus = Invoke-RestMethod -Method Post -Uri http://localhost:8000/corpora `
+  -ContentType "application/json" `
+  -Body (@{
+    name = "Aurora Control Hub"
+    domain = "software-project-assurance"
+    declared_formats = @("pdf", "docx", "markdown", "txt")
+  } | ConvertTo-Json)
+
+curl.exe --fail -X POST `
+  -F "logical_name=Decision Log" `
+  -F "declared_format=txt" `
+  -F "file=@backend/fixtures/corpora/aurora-control-hub/decision-log.txt;type=text/plain" `
+  "http://localhost:8000/corpora/$($corpus.id)/sources"
 ```
+
+### Normalization and exact provenance
+
+Original bytes are written under generated version keys and treated as immutable by application
+contract. Markdown/TXT decode as UTF-8, line endings become LF, Unicode becomes NFC, non-breaking
+spaces become regular spaces, trailing whitespace is removed per line, and blank boundary lines
+are removed. PDF/DOCX extracted text uses the same block normalizer.
+
+A citation contains `source_version_id`, `source_sha256`, `format`, `native_locator`, a half-open
+`normalized_start:normalized_end` character span within the normalized block, and `exact_quote`.
+The resolver re-hashes stored bytes, reparses the registered format from those bytes, resolves the
+locator against the fresh parse, verifies persisted block integrity, bounds-checks the fresh span,
+and compares the exact quote. Vector similarity and persisted block text alone never validate
+evidence.
+
+Locator forms:
+
+- PDF: `page[1]/block[0]`
+- DOCX: `paragraph[0]` or `table[0]/row[0]/cell[0]/paragraph[0]`
+- Markdown/TXT: `lines[1-3]/block[0]`
+
+### Deterministic embeddings
+
+The local adapter tokenizes with the pinned Python runtime, hashes tokens with SHA-256 into 64
+signed dimensions, and L2-normalizes the vector. It requires no key and gives stable local/test
+retrieval behavior. It is not an LLM embedding and must not be described as model-quality semantic
+retrieval.
 
 ## Local quality commands
 
@@ -142,13 +215,15 @@ Run from `backend/`:
 
 ```powershell
 uv sync --frozen --all-groups
+uv run python scripts/generate_synthetic_corpora.py
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
-uv run pytest
-uv run pytest --cov=app --cov-report=term-missing
 uv build
 ```
+
+The full coverage suite includes PostgreSQL/pgvector integration, so set the database variables as
+shown below before running pytest.
 
 To apply formatting:
 
@@ -187,12 +262,27 @@ docker compose up --detach db
 Then run from `backend/`:
 
 ```powershell
-$env:DATABASE_URL = "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
-$env:TEST_DATABASE_URL = $env:DATABASE_URL
+$appDatabaseUrl = "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
+$testDatabaseUrl = "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance_test"
+$env:DATABASE_URL = $appDatabaseUrl
+uv run python scripts/ensure_test_database.py
+uv run alembic upgrade head
+
+$env:DATABASE_URL = $testDatabaseUrl
+uv run alembic upgrade head
+uv run alembic downgrade 20260819_0001
 uv run alembic upgrade head
 uv run alembic current
-uv run pytest tests/test_readiness_integration.py
+
+$env:DATABASE_URL = $appDatabaseUrl
+$env:TEST_DATABASE_URL = $testDatabaseUrl
+$env:ALLOW_DESTRUCTIVE_TEST_DATABASE = "true"
+uv run pytest -m integration
+uv run pytest --cov=app --cov-report=term-missing
 ```
+
+The guard intentionally refuses `TEST_DATABASE_URL = DATABASE_URL`. The test database is
+disposable; the application database is not.
 
 Cleanup from the repository root:
 
@@ -213,8 +303,9 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. The browser UI should show `Foundation ready`, application
-version `0.1.0`, `Phase 01 — Development Foundation`, and the explicit not-implemented message.
+All three services should report healthy. `/version` should report application version `0.2.0`,
+`Phase 02 — Ingestion and Provenance`, the implemented deterministic data-layer scope, and the
+absence of agent reasoning. The existing frontend remains a dependency/status shell.
 
 ## CI
 
@@ -230,14 +321,44 @@ No deployment workflow exists.
 
 - No real secrets or API keys are required or committed.
 - Database settings use `SecretStr`; readiness errors expose controlled messages, not driver text.
+- Upload size is bounded; client filenames cannot provide path components; storage keys are
+  generated; partial staging files are removed on failure.
+- Upload protection is an HTTP request-size guard plus a streamed file-content bound; requests
+  without usable `Content-Length` rely on streaming enforcement.
+- PDF signature/text extraction and DOCX ZIP structure, entry count, expanded size, per-entry size,
+  and compression ratio are checked before successful ingestion.
+- Document text is stored and indexed as untrusted data; it is never an instruction or evidence
+  merely because a vector query returned it.
+- Citation validation rejects wrong hashes, locators, spans, quotes, tampered bytes, missing
+  versions, persisted-block tampering, and cross-corpus lookups by reparsing original bytes.
+- Supported/common malformed-input classes exercised by the test suite return controlled
+  cause/remedy errors. Exhaustive malformed-input containment is not claimed.
 - `.env`, virtual environments, dependency directories, coverage, build output, runtime database
   files, caches, `*.log`, `logs/`, and IDE files are ignored.
 - Containers use local-only defaults intended solely for development.
 - No claim is made for internet-facing authentication, production hardening, certification, or
   guaranteed redaction.
 
+## Current limitations
+
+- PDF support is extractable text only; no OCR or scanned-image interpretation exists.
+- The pypdf parser has an upload-size bound but no separate process sandbox or parse-time timeout.
+- Parser isolation and exhaustive malformed-input containment remain deferred.
+- DOCX support covers normal body paragraphs and table-cell paragraphs. Complex drawing text,
+  headers/footers, comments, and merged/nested-table fidelity are not claimed.
+- Markdown parsing intentionally covers deterministic headings, lists, and paragraph blocks rather
+  than full rendering semantics.
+- Local hashed feature vectors are lexical retrieval aids, not semantic LLM embeddings.
+- Local/container file storage is durable through a named volume but is not object storage,
+  replicated storage, malware scanning, or production document management.
+- A process crash after file promotion but before database commit can leave an orphan. Cancellation
+  edge cases require later reconciliation, and cleanup failures are best-effort.
+- The API has no internet-facing authentication/authorization layer; corpus identity is the current
+  isolation boundary.
+- Phase 03 reasoning and all later workflow capabilities remain absent.
+
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — planned overall architecture plus the implemented Phase 01 foundation
+- `docs/architecture.md` — implemented Phase 01/02 architecture and later-phase plans
