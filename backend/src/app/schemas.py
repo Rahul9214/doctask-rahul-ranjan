@@ -216,3 +216,80 @@ class UnderstandingResponse(BaseModel):
     facts: list[FactResponse]
     contradictions: list[ContradictionResponse]
     stage_events: list[StageEventResponse]
+
+
+class ExaminationRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    analysis_run_id: UUID
+    status: str
+    findings_status: str
+    ruleset_version: str
+    graph_version: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    pass_count: int
+    fail_count: int
+    warning_count: int
+    unknown_count: int
+    evaluated_rule_count: int
+    error_code: str | None
+    error_detail: str | None
+    created_at: datetime
+
+
+class FindingResponse(BaseModel):
+    id: UUID
+    examination_run_id: UUID
+    corpus_id: UUID
+    rule_id: str
+    rule_version: str
+    outcome: str
+    severity: str
+    title: str
+    message: str
+    structured_reason: dict[str, object]
+    evidence_kind: str
+    fact_ids: list[UUID]
+    contradiction_ids: list[UUID]
+    citations: list[CitationRequest]
+    confidence: float
+    status: str
+    created_at: datetime
+
+
+class ExaminationStageEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    examination_run_id: UUID
+    corpus_id: UUID
+    stage_name: str
+    started_at: datetime
+    completed_at: datetime | None
+    duration_ms: int | None
+    model_operation_count: int
+    model_attempt_count: int = 0
+    rule_evaluation_count: int = 0
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost_usd: float | None
+    cost_basis: str
+    status: str
+    error_code: str | None
+    skip_reason: str | None = None
+
+
+class ExaminationSummaryResponse(BaseModel):
+    run: ExaminationRunResponse
+    no_findings: bool
+    pass_count: int
+    fail_count: int
+    warning_count: int
+    unknown_count: int
+    evaluated_rule_count: int
+    ruleset_version: str
+    outcomes: dict[str, int]
+    finding_rule_ids: list[str]

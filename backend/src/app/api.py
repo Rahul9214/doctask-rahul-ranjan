@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
 
+from app.examine_service import ExamineService, stage_event_response
 from app.parsers import SourceFormat
 from app.schemas import (
     AnalysisRunResponse,
@@ -11,7 +12,11 @@ from app.schemas import (
     ContradictionResponse,
     CorpusCreate,
     CorpusResponse,
+    ExaminationRunResponse,
+    ExaminationStageEventResponse,
+    ExaminationSummaryResponse,
     FactResponse,
+    FindingResponse,
     IngestionResponse,
     SearchRequest,
     SearchResponse,
@@ -37,8 +42,13 @@ def get_understand_service(request: Request) -> UnderstandService:
     return cast(UnderstandService, request.app.state.understand_service)
 
 
+def get_examine_service(request: Request) -> ExamineService:
+    return cast(ExamineService, request.app.state.examine_service)
+
+
 Service = Annotated[Phase02Service, Depends(get_phase02_service)]
 Understand = Annotated[UnderstandService, Depends(get_understand_service)]
+Examine = Annotated[ExamineService, Depends(get_examine_service)]
 
 
 @router.post("/corpora", response_model=CorpusResponse, status_code=status.HTTP_201_CREATED)
@@ -215,4 +225,62 @@ async def get_analysis_stage_events(
     return [
         StageEventResponse.model_validate(event)
         for event in await understand.list_stage_events(corpus_id, run_id)
+    ]
+
+
+@router.post(
+    "/corpora/{corpus_id}/analysis-runs/{analysis_run_id}/examination-runs",
+    response_model=ExaminationRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_examination_run(
+    corpus_id: UUID, analysis_run_id: UUID, examine: Examine
+) -> ExaminationRunResponse:
+    return ExaminationRunResponse.model_validate(
+        await examine.create_run(corpus_id, analysis_run_id)
+    )
+
+
+@router.get(
+    "/corpora/{corpus_id}/examination-runs/{examination_run_id}",
+    response_model=ExaminationRunResponse,
+)
+async def get_examination_run(
+    corpus_id: UUID, examination_run_id: UUID, examine: Examine
+) -> ExaminationRunResponse:
+    return ExaminationRunResponse.model_validate(
+        await examine.get_run(corpus_id, examination_run_id)
+    )
+
+
+@router.get(
+    "/corpora/{corpus_id}/examination-runs/{examination_run_id}/findings",
+    response_model=list[FindingResponse],
+)
+async def get_examination_findings(
+    corpus_id: UUID, examination_run_id: UUID, examine: Examine
+) -> list[FindingResponse]:
+    return await examine.list_finding_responses(corpus_id, examination_run_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/examination-runs/{examination_run_id}/summary",
+    response_model=ExaminationSummaryResponse,
+)
+async def get_examination_summary(
+    corpus_id: UUID, examination_run_id: UUID, examine: Examine
+) -> ExaminationSummaryResponse:
+    return await examine.get_summary(corpus_id, examination_run_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/examination-runs/{examination_run_id}/stage-events",
+    response_model=list[ExaminationStageEventResponse],
+)
+async def get_examination_stage_events(
+    corpus_id: UUID, examination_run_id: UUID, examine: Examine
+) -> list[ExaminationStageEventResponse]:
+    return [
+        stage_event_response(event)
+        for event in await examine.list_stage_events(corpus_id, examination_run_id)
     ]

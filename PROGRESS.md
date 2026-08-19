@@ -2,37 +2,39 @@
 
 ## Current state
 
-- **Current phase:** Phase 03 — Understand — independent follow-up NO-GO; local backend
-  follow-up correction PASS
-- **Implementation status:** independent verification FAIL on grounding (retained); later
-  follow-up NO-GO on failed-retry attempt accounting and equivalent-value contradiction
-  comparison; those two blockers plus README skip-reason docs are corrected locally and
-  backend-gated. Independent verification is not PASS.
+- **Current phase:** Phase 04 â€” Examine â€” local initial implementation PASS; independent
+  verification FAIL / NO-GO; correction in progress
+- **Implementation status:** grounded Understand is committed on `main`. Grounded Examine is
+  implemented locally; independent Phase 04 verification returned FAIL / NO-GO and is being
+  corrected. Independent verification of this correction is not complete.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
   deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
   LangGraph Understand (classify/extract/ground/contradict/unknowns), inspectable analysis-run APIs,
+  versioned `software-project-assurance.v1` Examine ruleset, LangGraph Examine
+  (load/select/evaluate/validate/summarize/finalize), inspectable examination-run APIs,
   React status shell, local Compose stack, tests, and CI definition
 - **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
   httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter
 - **Application or test commands available:** exact verified commands are recorded below and in
   `README.md`
 - **Git write operations performed by the agent:** none
-- **Phase 01 status:** COMPLETE — local verification PASS, remote CI PASS, merged to `main`
-- **Phase 01 remote CI status:** PASS — attempt 2 backend/frontend and all PR checks passed
+- **Phase 01 status:** COMPLETE â€” local verification PASS, remote CI PASS, merged to `main`
+- **Phase 01 remote CI status:** PASS â€” attempt 2 backend/frontend and all PR checks passed
 - **Phase 01 merge status:** PR #1 merged to `main` as merge commit `cd9ffa7`
-- **Phase 02 status:** COMPLETE — implementation PASS, local verification PASS, independent
+- **Phase 02 status:** COMPLETE â€” implementation PASS, local verification PASS, independent
   verification GO, merged to `main` as merge commit `d0c2f0f` (PR #2)
 - **Phase 02 remote CI:** workflow accepted but externally blocked by account Actions
   budget/scheduler state; zero Phase 02 CI jobs materialized; normal and force cancellation
   returned GitHub HTTP 500; no Phase 02 code-related CI failure observed
-- **Phase 03 status:** independent follow-up NO-GO after earlier independent FAIL (grounding)
-  and local re-verification PASS; failed-retry attempt accounting and equivalent-value
-  contradiction comparison are corrected locally. Independent verification is not PASS.
-- **Phase 04 status:** NOT AUTHORIZED / NOT STARTED
-- **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
+- **Phase 03 status:** historical independent FAIL (grounding) and follow-up NO-GO retained.
+  Independent final follow-up: **GO**. Phase 03 committed. PR #3 merged to `main` as merge commit
+  `ceb2bf0`. Remote CI: PASS (2 successful checks).
+- **Phase 04 status:** local initial implementation PASS; independent verification FAIL / NO-GO;
+  correction in progress until independent verification completes
+- **SuperDocs familiarization/docs confirmation:** COMPLETE â€” manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
-## Phase 00 record — 2026-08-18
+## Phase 00 record â€” 2026-08-18
 
 ### Files created
 
@@ -43,7 +45,7 @@
 
 No application code, dependency manifests, backend/frontend directories, migrations, container files, fixtures, or tests were created in Phase 00.
 
-### Manual candidate prerequisite record — 2026-08-19
+### Manual candidate prerequisite record â€” 2026-08-19
 
 The candidate confirmed completing these actions personally outside the repository:
 
@@ -62,7 +64,7 @@ The candidate confirmed completing these actions personally outside the reposito
 
 Only completion status is recorded; no document, account, credential, contact, or personal details are included.
 
-## Phase 01 record — 2026-08-19
+## Phase 01 record â€” 2026-08-19
 
 ### Scope completed
 
@@ -109,81 +111,81 @@ LangGraph, its PostgreSQL checkpoint package, pgvector's Python integration, and
 for compatibility evidence only. Phase 01 application code does not import or use their business
 APIs.
 
-### Cursor implementation verification — exact commands and final results
+### Cursor implementation verification â€” exact commands and final results
 
 Inspection:
 
-- `git branch --show-current` — `feat/phase-01-foundation`
-- `git status --short --branch` — clean before implementation
-- `git log -5 --oneline --decorate` and `git ls-files` — Phase 00 baseline inspected
+- `git branch --show-current` â€” `feat/phase-01-foundation`
+- `git status --short --branch` â€” clean before implementation
+- `git log -5 --oneline --decorate` and `git ls-files` â€” Phase 00 baseline inspected
 - `python --version`, `py -0p`, `uv --version`, `node --version`, `npm --version`,
-  `docker --version`, `docker compose version` — host versions captured
-- PyPI JSON metadata queries for every direct backend/runtime tool — versions and
+  `docker --version`, `docker compose version` â€” host versions captured
+- PyPI JSON metadata queries for every direct backend/runtime tool â€” versions and
   `requires_python` inspected
-- npm metadata queries for React/Vite/TypeScript/ESLint/Prettier/Vitest/RTL — versions and Node
+- npm metadata queries for React/Vite/TypeScript/ESLint/Prettier/Vitest/RTL â€” versions and Node
   engines inspected
-- `uv python list 3.13` — CPython 3.13.14 managed download confirmed
-- `docker manifest inspect pgvector/pgvector:0.8.1-pg17-bookworm --verbose` — image/platforms
+- `uv python list 3.13` â€” CPython 3.13.14 managed download confirmed
+- `docker manifest inspect pgvector/pgvector:0.8.1-pg17-bookworm --verbose` â€” image/platforms
   confirmed
 
 Backend final gate from `backend/`:
 
-- `uv sync --frozen --all-groups` — PASS; 90 packages resolved, 88 installed/checked
-- `uv run ruff format --check .` — PASS; 10 files already formatted
-- `uv run ruff check .` — PASS
-- `uv run mypy src tests` — PASS; no issues in 8 source files
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 7 passed, 1 integration test skipped
+- `uv sync --frozen --all-groups` â€” PASS; 90 packages resolved, 88 installed/checked
+- `uv run ruff format --check .` â€” PASS; 10 files already formatted
+- `uv run ruff check .` â€” PASS
+- `uv run mypy src tests` â€” PASS; no issues in 8 source files
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 7 passed, 1 integration test skipped
   without `TEST_DATABASE_URL`, 97.96% total coverage
-- `uv build` — PASS; source distribution and wheel built
+- `uv build` â€” PASS; source distribution and wheel built
 
 Real database gate:
 
-- `uv run alembic current` with the running Compose database — PASS;
+- `uv run alembic current` with the running Compose database â€” PASS;
   `20260819_0001 (head)`
 - `uv run pytest tests/test_readiness_integration.py` with `DATABASE_URL` and
-  `TEST_DATABASE_URL` set — PASS; 1 passed against PostgreSQL/pgvector
+  `TEST_DATABASE_URL` set â€” PASS; 1 passed against PostgreSQL/pgvector
 
 Frontend final gate from `frontend/` during Cursor implementation verification:
 
-- `npm ci` — PASS; 235 packages installed, 0 reported vulnerabilities
-- `npm run format:check` — PASS
-- `npm run lint` — PASS
-- `npm run typecheck` — PASS
-- `npm test` — PASS; 1 file and 4 tests passed
-- `npm run build` — PASS; Vite production output built
+- `npm ci` â€” PASS; 235 packages installed, 0 reported vulnerabilities
+- `npm run format:check` â€” PASS
+- `npm run lint` â€” PASS
+- `npm run typecheck` â€” PASS
+- `npm test` â€” PASS; 1 file and 4 tests passed
+- `npm run build` â€” PASS; Vite production output built
 
 Container/runtime gate from repository root:
 
-- `docker compose config` and final `docker compose config --quiet` — PASS
-- `docker compose build` — PASS for backend and frontend
-- `docker compose up --build --detach` — PASS as the combined build/start path; all services became
+- `docker compose config` and final `docker compose config --quiet` â€” PASS
+- `docker compose build` â€” PASS for backend and frontend
+- `docker compose up --build --detach` â€” PASS as the combined build/start path; all services became
   healthy and readiness/frontend smoke checks passed
-- `docker compose up --detach` — PASS; database, backend, and frontend started
-- `docker compose exec backend alembic current` — PASS; migration at head
-- `Invoke-RestMethod http://localhost:8000/health` — PASS; `alive`
-- `Invoke-RestMethod http://localhost:8000/ready` — PASS; PostgreSQL and pgvector `ready`,
+- `docker compose up --detach` â€” PASS; database, backend, and frontend started
+- `docker compose exec backend alembic current` â€” PASS; migration at head
+- `Invoke-RestMethod http://localhost:8000/health` â€” PASS; `alive`
+- `Invoke-RestMethod http://localhost:8000/ready` â€” PASS; PostgreSQL and pgvector `ready`,
   pgvector `0.8.1`
-- `Invoke-RestMethod http://localhost:8000/version` — PASS; version `0.1.0`, Phase 01, truthful
+- `Invoke-RestMethod http://localhost:8000/version` â€” PASS; version `0.1.0`, Phase 01, truthful
   not-implemented status
-- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/` — PASS; HTTP 200
-- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready` — PASS; HTTP 200 through
+- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/` â€” PASS; HTTP 200
+- `Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready` â€” PASS; HTTP 200 through
   Nginx proxy
-- `docker compose ps` — PASS; all three services healthy
-- Browser accessibility snapshot — PASS; rendered `Foundation ready`, version `0.1.0`, current
+- `docker compose ps` â€” PASS; all three services healthy
+- Browser accessibility snapshot â€” PASS; rendered `Foundation ready`, version `0.1.0`, current
   Phase 01, and `Task 1 business workflow is not implemented yet.`
-- Browser console error check — PASS; zero errors/warnings
-- `docker compose down` — PASS; containers/network removed and persistent volume retained
-- final `docker compose ps --all` — PASS; no running project containers
+- Browser console error check â€” PASS; zero errors/warnings
+- `docker compose down` â€” PASS; containers/network removed and persistent volume retained
+- final `docker compose ps --all` â€” PASS; no running project containers
 
-### Candidate-side independent verification correction — 2026-08-19
+### Candidate-side independent verification correction â€” 2026-08-19
 
 The candidate independently confirmed that backend, Docker, PostgreSQL/pgvector, migration,
 readiness, HTTP smoke, and real database integration gates passed.
 
 The candidate's initial independent frontend verification produced:
 
-- `npm ci` — PASS
-- `npm run format:check` — **FAIL**; Prettier reported formatting drift/non-canonical formatting in:
+- `npm ci` â€” PASS
+- `npm run format:check` â€” **FAIL**; Prettier reported formatting drift/non-canonical formatting in:
   - `.prettierrc.json`
   - `eslint.config.js`
   - `src/App.test.tsx`
@@ -195,15 +197,15 @@ The candidate's initial independent frontend verification produced:
 
 The candidate corrected the defect with:
 
-- `npm run format` — PASS; Prettier applied canonical formatting
+- `npm run format` â€” PASS; Prettier applied canonical formatting
 
 The candidate then reran the complete affected frontend quality/build gate:
 
-- `npm run format:check` — PASS; `All matched files use Prettier code style!`
-- `npm run lint` — PASS
-- `npm run typecheck` — PASS
-- `npm test` — PASS; 1 test file and 4 tests passed
-- `npm run build` — PASS; Vite production build completed successfully
+- `npm run format:check` â€” PASS; `All matched files use Prettier code style!`
+- `npm run lint` â€” PASS
+- `npm run typecheck` â€” PASS
+- `npm test` â€” PASS; 1 test file and 4 tests passed
+- `npm run build` â€” PASS; Vite production build completed successfully
 
 This candidate-side failure remains part of the evidence history. Phase 01 remains PASS only because
 the formatting defect was corrected and every affected frontend gate was rerun successfully.
@@ -217,7 +219,7 @@ README command verification after the correction:
 
 No README command correction was required.
 
-### Independent Phase 01 verification — PASS_WITH_CHANGES — 2026-08-19
+### Independent Phase 01 verification â€” PASS_WITH_CHANGES â€” 2026-08-19
 
 - Independent verifier result: **PASS_WITH_CHANGES**
 - Critical findings: **none**
@@ -239,31 +241,31 @@ Minimal corrections applied:
 
 Correction verification:
 
-- Backend Ruff format check — PASS; 10 files formatted
-- Backend Ruff lint — PASS
-- Backend mypy — PASS; no issues in 8 source files
-- Backend pytest/coverage final rerun — PASS; 7 passed, 1 integration test skipped without
+- Backend Ruff format check â€” PASS; 10 files formatted
+- Backend Ruff lint â€” PASS
+- Backend mypy â€” PASS; no issues in 8 source files
+- Backend pytest/coverage final rerun â€” PASS; 7 passed, 1 integration test skipped without
   `TEST_DATABASE_URL`, 97.96% coverage
-- Backend package build — PASS; source distribution and wheel built
-- Frontend Prettier check — PASS; canonical formatting confirmed
-- Frontend ESLint — PASS
-- Frontend TypeScript typecheck — PASS
-- Frontend Vitest — PASS; 1 test file and 4 tests passed
-- Frontend production build — PASS
-- `docker compose config` — PASS
-- `docker compose build` — PASS; both hardened contexts retained every required Docker build input
-- `docker compose up --detach` and `docker compose ps` — PASS; database, backend, and frontend all
+- Backend package build â€” PASS; source distribution and wheel built
+- Frontend Prettier check â€” PASS; canonical formatting confirmed
+- Frontend ESLint â€” PASS
+- Frontend TypeScript typecheck â€” PASS
+- Frontend Vitest â€” PASS; 1 test file and 4 tests passed
+- Frontend production build â€” PASS
+- `docker compose config` â€” PASS
+- `docker compose build` â€” PASS; both hardened contexts retained every required Docker build input
+- `docker compose up --detach` and `docker compose ps` â€” PASS; database, backend, and frontend all
   healthy
-- `/health`, `/ready`, and `/version` — PASS
-- Frontend `/` and `/api/ready` — PASS; HTTP 200
-- `docker compose exec backend alembic current` — PASS; `20260819_0001 (head)`
-- Container startup logs — PASS; migration, Uvicorn, and Nginx startup completed without runtime
+- `/health`, `/ready`, and `/version` â€” PASS
+- Frontend `/` and `/api/ready` â€” PASS; HTTP 200
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0001 (head)`
+- Container startup logs â€” PASS; migration, Uvicorn, and Nginx startup completed without runtime
   package synchronization
-- `docker compose down` — PASS; containers/network removed and persistent volume retained
-- final `docker compose ps --all` — PASS; no project containers remained
-- `git diff --check` — PASS
+- `docker compose down` â€” PASS; containers/network removed and persistent volume retained
+- final `docker compose ps --all` â€” PASS; no project containers remained
+- `git diff --check` â€” PASS
 
-### Remote GitHub CI attempt 1 — backend failure — 2026-08-19
+### Remote GitHub CI attempt 1 â€” backend failure â€” 2026-08-19
 
 - Frontend CI: **PASS**
 - Backend CI: **FAIL**
@@ -306,25 +308,25 @@ Focused test changes:
 
 Local fix verification:
 
-- `uv run ruff format --check .` — PASS; 10 files formatted
-- `uv run ruff check .` — PASS
-- `uv run mypy src tests` — PASS; no issues in 8 source files
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 10 passed, 1 integration test skipped
+- `uv run ruff format --check .` â€” PASS; 10 files formatted
+- `uv run ruff check .` â€” PASS
+- `uv run mypy src tests` â€” PASS; no issues in 8 source files
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 10 passed, 1 integration test skipped
   without `TEST_DATABASE_URL`, 100% coverage
-- `uv build` — PASS; source distribution and wheel built
-- `docker compose config` — PASS
-- `docker compose up --build --detach` — PASS
-- `docker compose ps` — PASS; database, backend, and frontend all healthy
-- `/health`, `/ready`, and `/version` — PASS
-- `docker compose exec backend alembic current` — PASS; `20260819_0001 (head)`
-- real `tests/test_readiness_integration.py` against the Compose database — PASS; 1 passed
-- `docker compose down` — PASS
-- `git diff --check` — PASS
+- `uv build` â€” PASS; source distribution and wheel built
+- `docker compose config` â€” PASS
+- `docker compose up --build --detach` â€” PASS
+- `docker compose ps` â€” PASS; database, backend, and frontend all healthy
+- `/health`, `/ready`, and `/version` â€” PASS
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0001 (head)`
+- real `tests/test_readiness_integration.py` against the Compose database â€” PASS; 1 passed
+- `docker compose down` â€” PASS
+- `git diff --check` â€” PASS
 
 Remote CI status: **FAILED / FIX PENDING** until the candidate pushes this fix and GitHub Actions
 reruns successfully. Attempt 1 remains recorded and is not reclassified as PASS.
 
-### Remote GitHub CI attempt 2 and merge — 2026-08-19
+### Remote GitHub CI attempt 2 and merge â€” 2026-08-19
 
 - Focused readiness fix commit: `b7f4e5a`
 - Backend CI: **PASS**
@@ -358,7 +360,7 @@ the focused cross-platform readiness fix.
 - The first frontend test command entered Vitest watch mode because npm parsed `--run` as npm
   configuration. Changed the repository script to `vitest run`; tests then exited cleanly.
 - A parallel `npm ci` and Prettier check raced while `node_modules` was being replaced, producing a
-  false “prettier not recognized” failure. Dependency installation and quality checks were rerun in
+  false â€œprettier not recognizedâ€ failure. Dependency installation and quality checks were rerun in
   the correct sequence and passed.
 - Candidate-side independent verification later found genuine formatting drift/non-canonical
   formatting in eight frontend files. The candidate ran `npm run format`, then reran
@@ -427,145 +429,145 @@ candidate authorization.
 - Our chosen implementation: Python, FastAPI, LangGraph, PostgreSQL/pgvector, React/TypeScript, and MCP as the strongest chosen machine-interface shape.
 - Initial architecture: modular monolith with shared application services and separate process roles only where needed.
 - Data: synthetic/public only.
-- Candidate execution constraint/project planning assumption: 24-hour hard ceiling, with approximately 19.5 hours planned across Phases 01–10 and 4.5 hours protected for debugging, verification, evidence, and final audit. This schedule is not stated in the assignment PDF.
+- Candidate execution constraint/project planning assumption: 24-hour hard ceiling, with approximately 19.5 hours planned across Phases 01â€“10 and 4.5 hours protected for debugging, verification, evidence, and final audit. This schedule is not stated in the assignment PDF.
 
 ## Decisions
 
-### D-001 — Domain and corpus
+### D-001 â€” Domain and corpus
 
 Use fictional software-project assurance documents because overlapping plans, status reports, risks, decisions, and meeting records naturally exercise extraction, contradiction, rules, exact provenance, and focused updates without sensitive data.
 
-### D-002 — Deliverable structure
+### D-002 â€” Deliverable structure
 
 Use stable structured Project Assurance Register items rather than a free-form report. Stable IDs and canonical serialization make item-level review, incremental replacement, and exact unchanged-content proof feasible.
 
-### D-003 — Format breadth
+### D-003 â€” Format breadth
 
 Target text-based PDF, DOCX, Markdown, and plain text. Exclude OCR, handwriting, arbitrary formats, and spreadsheet output initially. Consider CSV only after the five-behavior floor and genuine movement evidence are green.
 
-### D-004 — Exact provenance
+### D-004 â€” Exact provenance
 
 A supported claim/finding requires immutable source version ID and SHA-256, a format-native locator, a span where available, and exact quoted evidence. A page number alone is not sufficient.
 
-### D-005 — Human gate
+### D-005 â€” Human gate
 
 The acceptance demonstration uses a real human decision:
 
 ```text
 agent proposes
-→ WAITING_FOR_REVIEW
-→ human reviews
-→ human explicitly approves/rejects individual items
-→ decision is submitted through a UI/API/MCP operation
-→ workflow resumes
-→ only approved items are applied
+â†’ WAITING_FOR_REVIEW
+â†’ human reviews
+â†’ human explicitly approves/rejects individual items
+â†’ decision is submitted through a UI/API/MCP operation
+â†’ workflow resumes
+â†’ only approved items are applied
 ```
 
 MCP/API exposes explicit item-level operations, but the demonstrated path does not let the proposing agent automatically approve its own work. No RBAC or proposer/reviewer identity-separation requirement is added.
 
-### D-006 — Machine operation
+### D-006 â€” Machine operation
 
 React and MCP/API will call the same application services. The machine surface exposes, rather than bypasses, the review gate. MCP is our strongest chosen interface shape, not an absolute assignment mandate.
 
-### D-007 — Durability and concurrency
+### D-007 â€” Durability and concurrency
 
 Start with the simplest PostgreSQL-backed durable design that proves checkpoint resume, idempotency, concurrent-run isolation, and safe publication. Do not pre-commit to a transactional outbox. Add one only if implementation tests expose a concrete need.
 
-### D-008 — Incremental definition
+### D-008 â€” Incremental definition
 
 A new source may be fully parsed and indexed, but the existing corpus must not be fully reprocessed by the model. Determine an affected entity/rule set, process only that set, and preserve unaffected register item canonical bytes and hashes.
 
-### D-009 — Keyless proof
+### D-009 â€” Keyless proof
 
 Behavior 7 is planned as a strong differentiator: use a deterministic model adapter only at the model boundary while exercising real graph transitions, parsers, PostgreSQL/pgvector, process restart, transactions, concurrency, API/MCP transport, and deterministic validators. It may be cut only with explicit rationale if time forces a trade-off.
 
-### D-010 — Hosted deployment
+### D-010 â€” Hosted deployment
 
 Hosted deployment is not explicitly required by Task 1. Our minimum acceptance target is a reproducible local/container deployment. Hosted deployment will be attempted only after all mandatory Task 1 behaviors and evidence are green.
 
-### D-011 — Infrastructure restraint
+### D-011 â€” Infrastructure restraint
 
 Do not introduce Kubernetes, Terraform, Kafka, Redis, Celery, microservices, or similar infrastructure without a measured blocker. Prefer one codebase and PostgreSQL.
 
-### D-012 — Truthful documentation
+### D-012 â€” Truthful documentation
 
 README must separate **implemented** from **planned**. Capabilities are not marked implemented until executable evidence passes and is recorded here.
 
-### D-013 — Git control
+### D-013 â€” Git control
 
 The candidate executes all Git writes. Agents may inspect Git read-only and must provide exact manual commands whenever Git work is needed.
 
-### D-014 — Command truthfulness
+### D-014 â€” Command truthfulness
 
 Do not invent scripts, package names, or commands. Phase 01 creates and verifies the command contract. Every later phase must provide exact commands that exist in the repository.
 
-### D-015 — Behaviors 6–10 classification
+### D-015 â€” Behaviors 6â€“10 classification
 
-Behaviors 1–5 are the explicit non-cuttable floor. Each behavior 6–10 item—one-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost—is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
+Behaviors 1â€“5 are the explicit non-cuttable floor. Each behavior 6â€“10 itemâ€”one-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/costâ€”is a **Strong differentiator â€” may be cut only with explicit rationale if time forces a trade-off.**
 
-### D-016 — Movement cut policy
+### D-016 â€” Movement cut policy
 
 Understand, examine, and stay alive must each remain genuinely represented. Detailed sub-features inside those movements may be cut with explicit rationale; they are not all independently non-cuttable.
 
-### D-017 — Deliverable-side provenance
+### D-017 â€” Deliverable-side provenance
 
 A register-grounded finding uses `register_version_id`, `register_item_id`, `field_path`, `value_hash`, and `exact_value`. Validation resolves the locator against the immutable register version before treating the finding as supported.
 
-### D-018 — Costly external-call crash window
+### D-018 â€” Costly external-call crash window
 
 Persist operation key and attempt before the call, use provider idempotency when available, persist the structured result before graph advancement, and reuse durable completed results on resume. Retry only when non-completion is known. An unknowable provider outcome becomes an honest ambiguous state for reconciliation/retry; exactly-once behavior is not claimed.
 
-### D-019 — Incremental proof
+### D-019 â€” Incremental proof
 
 Evidence must compare affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes. Hash equality alone does not prove a full rerun was avoided.
 
-### D-020 — Graceful degradation
+### D-020 â€” Graceful degradation
 
 Demonstrated failure paths should use a working deterministic fallback, bounded retry, safe skip, or human escalation where implemented and tested. If no safe fallback exists, preserve durable state, expose cause/remedy, remain resumable, and never falsely report success. No fallback is currently implemented or claimed.
 
 ## Assumptions
 
-### A-001 — Meaning of “commit”
+### A-001 â€” Meaning of â€œcommitâ€
 
-“Commit” in the agentic workflow means applying approved items to a new durable register version. It does not mean a Git commit.
+â€œCommitâ€ in the agentic workflow means applying approved items to a new durable register version. It does not mean a Git commit.
 
-### A-002 — Meaning of “mixed formats”
+### A-002 â€” Meaning of â€œmixed formatsâ€
 
 The initial declared set of PDF, DOCX, Markdown, and TXT satisfies mixed-format input. PDF support initially requires extractable text.
 
-### A-003 — Meaning of “exact place”
+### A-003 â€” Meaning of â€œexact placeâ€
 
-Exact source provenance means a resolvable immutable source/hash, native locator, span, and quote—not only a document name or page.
+Exact source provenance means a resolvable immutable source/hash, native locator, span, and quoteâ€”not only a document name or page.
 
-### A-004 — Watched location
+### A-004 â€” Watched location
 
 The minimum watcher is a mounted local inbox using stable-file detection and content-hash deduplication. API uploads may emit the same ingestion event. Sophisticated filesystem infrastructure is unnecessary unless tests prove otherwise.
 
-### A-005 — Explicit review
+### A-005 â€” Explicit review
 
 A human can submit decisions through the React UI or invoke an explicit API/MCP decision operation. The important property is conscious item-level human choice, not which adapter carries it. This does not assume RBAC or proposer/reviewer identity separation.
 
-### A-006 — Model availability and cost
+### A-006 â€” Model availability and cost
 
-Runtime model access is provider-configurable. The planned Behavior 7 strong differentiator is a real keyless acceptance suite and demo mode. If pricing is unavailable, report token/usage data and “cost unavailable” instead of inventing a currency amount.
+Runtime model access is provider-configurable. The planned Behavior 7 strong differentiator is a real keyless acceptance suite and demo mode. If pricing is unavailable, report token/usage data and â€œcost unavailableâ€ instead of inventing a currency amount.
 
-### A-007 — Retrieval and grounding
+### A-007 â€” Retrieval and grounding
 
 pgvector improves retrieval recall but cannot establish evidence. Only deterministic resolution against immutable source content establishes provenance.
 
-### A-008 — One-command target
+### A-008 â€” One-command target
 
 The intended fresh-clone target is a single local/container startup command after the required file is implemented and verified. Phase 00 does not claim that command exists.
 
-### A-009 — Authentication scope
+### A-009 â€” Authentication scope
 
 Local/demo identity may be sufficient within the time ceiling. Corpus/run scoping remains a planned data-safety baseline; concurrent-run proof is Behavior 9 and therefore a strong differentiator rather than part of the explicit five-behavior floor. Internet-facing production authentication is not claimed unless implemented and tested.
 
-### A-010 — SuperDocs familiarization data
+### A-010 â€” SuperDocs familiarization data
 
-Candidate product familiarization may use the candidate’s own non-confidential work outside this repository. Repository fixtures and demonstrations remain synthetic/public.
+Candidate product familiarization may use the candidateâ€™s own non-confidential work outside this repository. Repository fixtures and demonstrations remain synthetic/public.
 
-### A-011 — Measurement
+### A-011 â€” Measurement
 
 Measurement methodology is stated before results. Variance, tail behavior, pricing basis, and limitations are reported. Raw measurement data will be committed to the repository. A success claim requires matching evidence.
 
@@ -575,51 +577,51 @@ Status values are `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `FAIL`, or `CUT_OPTIONAL
 
 ### Five-behavior non-cuttable floor
 
-- Visible path-changing stages — `NOT_STARTED`
-- Exact claim/finding provenance — `NOT_STARTED`
-- Unsupported-claim honesty — `NOT_STARTED`
-- Real human mixed approve/reject — `NOT_STARTED`
-- Approved-only application — `NOT_STARTED`
-- Process kill and durable resume — `NOT_STARTED`
-- Machine-interface end-to-end explicit gate operations — `NOT_STARTED`
+- Visible path-changing stages â€” `NOT_STARTED`
+- Exact claim/finding provenance â€” `NOT_STARTED`
+- Unsupported-claim honesty â€” `NOT_STARTED`
+- Real human mixed approve/reject â€” `NOT_STARTED`
+- Approved-only application â€” `NOT_STARTED`
+- Process kill and durable resume â€” `NOT_STARTED`
+- Machine-interface end-to-end explicit gate operations â€” `NOT_STARTED`
 
 ### Planned movement evidence
 
-- Mixed-format ingestion and declared-format validation — `PASS` for Phase 02
-- Document classification reasoning — `NOT_STARTED` for Phase 03
-- Contradiction surfacing — `NOT_STARTED`
-- Honest no-findings result — `NOT_STARTED`
-- Configuration-only rule/domain change — `NOT_STARTED`
-- Focused incremental processing — `NOT_STARTED`
-- Incremental affected/preserved IDs, stages, operation keys, source versions, and before/after hashes — `NOT_STARTED`
-- Source-attributed change history — `NOT_STARTED`
-- Second-corpus fixture creation for ingestion/provenance — `PASS` for Phase 02
-- Second-corpus agent execution — `NOT_STARTED`
+- Mixed-format ingestion and declared-format validation â€” `PASS` for Phase 02
+- Document classification reasoning â€” `NOT_STARTED` for Phase 03
+- Contradiction surfacing â€” `NOT_STARTED`
+- Honest no-findings result â€” `NOT_STARTED`
+- Configuration-only rule/domain change â€” `NOT_STARTED`
+- Focused incremental processing â€” `NOT_STARTED`
+- Incremental affected/preserved IDs, stages, operation keys, source versions, and before/after hashes â€” `NOT_STARTED`
+- Source-attributed change history â€” `NOT_STARTED`
+- Second-corpus fixture creation for ingestion/provenance â€” `PASS` for Phase 02
+- Second-corpus agent execution â€” `NOT_STARTED`
 
 Detailed movement items may be cut with explicit rationale while keeping understand, examine, and stay alive genuinely represented.
 
-### Behaviors 6–10 strong differentiators
+### Behaviors 6â€“10 strong differentiators
 
-Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
+Each is a **Strong differentiator â€” may be cut only with explicit rationale if time forces a trade-off.**
 
-- Fresh-clone local/container command — `NOT_STARTED`
-- Real keyless tests — `NOT_STARTED`
-- Document prompt-injection defense — `NOT_STARTED`
-- Concurrent distinct/same-corpus isolation — `NOT_STARTED`
-- Stage timing/usage/cost basis — `NOT_STARTED`
+- Fresh-clone local/container command â€” `NOT_STARTED`
+- Real keyless tests â€” `NOT_STARTED`
+- Document prompt-injection defense â€” `NOT_STARTED`
+- Concurrent distinct/same-corpus isolation â€” `NOT_STARTED`
+- Stage timing/usage/cost basis â€” `NOT_STARTED`
 
 ### Additional prioritized engineering evidence
 
-- Idempotent duplicate source ingestion — `PASS` for Phase 02 logical-source/content behavior
-- Costly external-call ambiguous-outcome reconciliation — `NOT_STARTED`
-- Cause/remedy dependency failures and resumability — `NOT_STARTED`
-- Working fallback/retry/skip/escalation paths, without unproven fallback claims — `NOT_STARTED`
-- Streamed bounded upload/SHA computation — `PASS` for Phase 02
-- Phase 01 lint/format/typecheck/test/build/smoke/cleanup command proof — `PASS`
+- Idempotent duplicate source ingestion â€” `PASS` for Phase 02 logical-source/content behavior
+- Costly external-call ambiguous-outcome reconciliation â€” `NOT_STARTED`
+- Cause/remedy dependency failures and resumability â€” `NOT_STARTED`
+- Working fallback/retry/skip/escalation paths, without unproven fallback claims â€” `NOT_STARTED`
+- Streamed bounded upload/SHA computation â€” `PASS` for Phase 02
+- Phase 01 lint/format/typecheck/test/build/smoke/cleanup command proof â€” `PASS`
 
 ## Candidate execution constraint and project planning assumption
 
-This schedule is not stated in the assignment PDF. Phases 01–10 total approximately 19.5 planned hours:
+This schedule is not stated in the assignment PDF. Phases 01â€“10 total approximately 19.5 planned hours:
 
 - Phase 01: 1.25h
 - Phase 02: 2h
@@ -632,7 +634,7 @@ This schedule is not stated in the assignment PDF. Phases 01–10 total approxim
 - Phase 09: 2.5h
 - Phase 10: 2.5h
 
-The remaining 4.5h is protected buffer for debugging, verification, evidence repair, and final audit—not additional feature scope.
+The remaining 4.5h is protected buffer for debugging, verification, evidence repair, and final auditâ€”not additional feature scope.
 
 If cuts are required:
 
@@ -644,7 +646,7 @@ If cuts are required:
 6. sophisticated watcher implementation; and
 7. extra format breadth.
 
-Never cut the five explicit floor behaviors: visible path-changing stages, durable resume, item-level human review, machine-driven flow, or no-bluffing. Understand, examine, and stay alive must each remain represented at genuine minimum depth; detailed sub-features may be cut with explicit rationale. Behaviors 6–10 remain prioritized strong differentiators and may be cut only with explicit rationale if time forces a trade-off.
+Never cut the five explicit floor behaviors: visible path-changing stages, durable resume, item-level human review, machine-driven flow, or no-bluffing. Understand, examine, and stay alive must each remain represented at genuine minimum depth; detailed sub-features may be cut with explicit rationale. Behaviors 6â€“10 remain prioritized strong differentiators and may be cut only with explicit rationale if time forces a trade-off.
 
 ## Known limitations
 
@@ -683,7 +685,7 @@ Before Phase 01 implementation begins:
 - [x] The PostgreSQL durability design does not prematurely require a transactional outbox.
 - [x] The 19.5h plan plus 4.5h reserve and cut order are consistent in all files.
 - [x] Data/security and Git/command rules are consistent in all files.
-- [x] Behaviors 1–5 versus 6–10, movement cut policy, stack choice, MCP status, provenance, failure, crash-window, and incremental-proof terminology are consistent in all files.
+- [x] Behaviors 1â€“5 versus 6â€“10, movement cut policy, stack choice, MCP status, provenance, failure, crash-window, and incremental-proof terminology are consistent in all files.
 
 Phase 01 execution requirements after authorization:
 
@@ -694,9 +696,9 @@ Phase 01 execution requirements after authorization:
 
 ## Verification log
 
-Phase 00 verification status: **PASS — authoritative assignment comparison completed; independent verifier findings incorporated at documentation level.**
+Phase 00 verification status: **PASS â€” authoritative assignment comparison completed; independent verifier findings incorporated at documentation level.**
 
-Phase 01 verification status: **COMPLETE — local quality, real PostgreSQL/pgvector integration,
+Phase 01 verification status: **COMPLETE â€” local quality, real PostgreSQL/pgvector integration,
 container startup/migration/readiness, rendered frontend, cleanup, remote backend/frontend CI, and
 merge gates completed.**
 
@@ -705,7 +707,7 @@ foundation evidence only and does not prove any Task 1 business behavior.
 
 All four files were reread after the final correction pass. Incorporated findings include:
 
-- behaviors 1–5 are the explicit non-cuttable floor; behaviors 6–10 are prioritized strong differentiators that may be cut only with explicit rationale;
+- behaviors 1â€“5 are the explicit non-cuttable floor; behaviors 6â€“10 are prioritized strong differentiators that may be cut only with explicit rationale;
 - all three movements remain represented while detailed internal cuts are allowed with rationale;
 - assignment-preferred, allowed-comparable, and chosen stack wording is separated, with MCP identified as our strongest chosen machine-interface shape;
 - README records current assumptions and latency, cost, simplicity, and growth trade-offs without fabricated results;
@@ -725,7 +727,7 @@ Only the Phase 01 foundation capabilities listed in this record are implemented.
 Phase 01 is formally closed. Await explicit candidate authorization before beginning Phase 02 or
 any Task 1 business logic.
 
-## Phase 02 record — 2026-08-19
+## Phase 02 record â€” 2026-08-19
 
 ### Authorization and scope
 
@@ -754,19 +756,19 @@ present. No future-phase business table was added.
 
 Migration evidence against PostgreSQL 17/pgvector 0.8.1:
 
-- `uv run alembic upgrade head` — PASS from Phase 01; reached `20260819_0002`;
-- `uv run alembic downgrade 20260819_0001` — PASS;
-- `uv run alembic upgrade head` — PASS after downgrade; and
-- `uv run alembic current` — PASS, `20260819_0002 (head)`.
+- `uv run alembic upgrade head` â€” PASS from Phase 01; reached `20260819_0002`;
+- `uv run alembic downgrade 20260819_0001` â€” PASS;
+- `uv run alembic upgrade head` â€” PASS after downgrade; and
+- `uv run alembic current` â€” PASS, `20260819_0002 (head)`.
 
 ### Dependency decisions
 
 Added and locked:
 
-- `pypdf==6.16.1` — BSD-3-Clause, Python >=3.9, selected for text-based PDF parsing instead of
+- `pypdf==6.16.1` â€” BSD-3-Clause, Python >=3.9, selected for text-based PDF parsing instead of
   AGPL PyMuPDF to avoid imposing AGPL server/application obligations;
-- `python-docx==1.2.0` — MIT, Python >=3.9, release-tested on Python 3.13; and
-- `python-multipart==0.0.32` — direct FastAPI upload dependency, Python >=3.10, already present
+- `python-docx==1.2.0` â€” MIT, Python >=3.9, release-tested on Python 3.13; and
+- `python-multipart==0.0.32` â€” direct FastAPI upload dependency, Python >=3.10, already present
   transitively but made explicit.
 
 `lxml==6.1.1` is the locked python-docx transitive dependency. No Markdown framework, OCR package,
@@ -822,18 +824,18 @@ The resolver performs, in order:
 
 Real PostgreSQL integration tests prove:
 
-- valid source-file → ingestion → immutable version/hash → parser → block → citation → resolver
-  round-trip for PDF, DOCX, Markdown, and TXT — PASS;
-- wrong source SHA — rejected with `source_sha_mismatch`;
-- wrong native locator — rejected with `native_locator_mismatch`;
-- out-of-range normalized span — rejected with `normalized_span_mismatch`;
-- wrong exact quote — rejected with `exact_quote_mismatch`;
-- persisted normalized-text tampering — rejected with `source_block_integrity_mismatch`;
-- persisted native-locator tampering — rejected with `source_block_integrity_mismatch`;
-- citation format disagreement — rejected with `source_format_mismatch`;
-- source bytes changed after registration — rejected with `source_bytes_tampered`;
-- missing version — rejected with `source_version_not_found`; and
-- cross-corpus version/citation lookup — not found.
+- valid source-file â†’ ingestion â†’ immutable version/hash â†’ parser â†’ block â†’ citation â†’ resolver
+  round-trip for PDF, DOCX, Markdown, and TXT â€” PASS;
+- wrong source SHA â€” rejected with `source_sha_mismatch`;
+- wrong native locator â€” rejected with `native_locator_mismatch`;
+- out-of-range normalized span â€” rejected with `normalized_span_mismatch`;
+- wrong exact quote â€” rejected with `exact_quote_mismatch`;
+- persisted normalized-text tampering â€” rejected with `source_block_integrity_mismatch`;
+- persisted native-locator tampering â€” rejected with `source_block_integrity_mismatch`;
+- citation format disagreement â€” rejected with `source_format_mismatch`;
+- source bytes changed after registration â€” rejected with `source_bytes_tampered`;
+- missing version â€” rejected with `source_version_not_found`; and
+- cross-corpus version/citation lookup â€” not found.
 
 The container API smoke ingested the synthetic TXT decision log, persisted three blocks, and
 validated an exact citation. Recorded smoke SHA-256:
@@ -878,52 +880,52 @@ request validation does not echo uploaded content or internal paths.
 
 Dependency/fixture:
 
-- `uv add "pypdf==6.16.1" "python-docx==1.2.0" "python-multipart==0.0.32"` — PASS;
-- `uv lock` — PASS;
-- `uv run python scripts/generate_synthetic_corpora.py` — PASS; and
-- `uv sync --frozen --all-groups` — PASS.
+- `uv add "pypdf==6.16.1" "python-docx==1.2.0" "python-multipart==0.0.32"` â€” PASS;
+- `uv lock` â€” PASS;
+- `uv run python scripts/generate_synthetic_corpora.py` â€” PASS; and
+- `uv sync --frozen --all-groups` â€” PASS.
 
 Backend final gate:
 
-- `uv run ruff format --check .` — PASS; 27 files formatted;
-- `uv run ruff check .` — PASS;
-- `uv run mypy src tests` — PASS; no issues in 21 source files;
-- `uv run pytest --cov=app --cov-report=term-missing` with real PostgreSQL/pgvector — PASS;
+- `uv run ruff format --check .` â€” PASS; 27 files formatted;
+- `uv run ruff check .` â€” PASS;
+- `uv run mypy src tests` â€” PASS; no issues in 21 source files;
+- `uv run pytest --cov=app --cov-report=term-missing` with real PostgreSQL/pgvector â€” PASS;
   31 tests, 90.86% coverage; and
-- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.2.0`.
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.2.0`.
 
 Focused integration:
 
-- `uv run pytest -m integration` — PASS; 9 tests against PostgreSQL/pgvector;
-- PDF/DOCX/Markdown/TXT citation parameterization — PASS;
-- duplicate/changed/cross-corpus version behavior — PASS;
-- all required provenance/tamper failures — PASS; and
-- pgvector persistence, similarity, filter, and corpus isolation — PASS.
+- `uv run pytest -m integration` â€” PASS; 9 tests against PostgreSQL/pgvector;
+- PDF/DOCX/Markdown/TXT citation parameterization â€” PASS;
+- duplicate/changed/cross-corpus version behavior â€” PASS;
+- all required provenance/tamper failures â€” PASS; and
+- pgvector persistence, similarity, filter, and corpus isolation â€” PASS.
 
 Frontend:
 
-- `npm ci` — PASS; 235 packages, 0 reported vulnerabilities;
-- initial `npm run format:check` — FAIL on 11 committed files due non-canonical working-tree
+- `npm ci` â€” PASS; 235 packages, 0 reported vulnerabilities;
+- initial `npm run format:check` â€” FAIL on 11 committed files due non-canonical working-tree
   line endings/format;
-- `npm run format` — PASS;
-- rerun `npm run format:check` — PASS;
-- `npm run lint` — PASS;
-- `npm run typecheck` — PASS;
-- `npm test` — PASS; 1 file, 4 tests;
-- `npm run build` — PASS.
+- `npm run format` â€” PASS;
+- rerun `npm run format:check` â€” PASS;
+- `npm run lint` â€” PASS;
+- `npm run typecheck` â€” PASS;
+- `npm test` â€” PASS; 1 file, 4 tests;
+- `npm run build` â€” PASS.
 
 Docker/runtime:
 
-- `docker compose config --quiet` — PASS;
-- `docker compose build` — PASS;
-- `docker compose up --build --detach` — PASS;
-- all three services healthy — PASS;
-- `docker compose exec backend alembic current` — PASS, `20260819_0002 (head)`;
-- `/health`, `/ready`, `/version`, frontend `/`, and proxy `/api/ready` — PASS;
-- container TXT ingestion and exact citation validation — PASS;
+- `docker compose config --quiet` â€” PASS;
+- `docker compose build` â€” PASS;
+- `docker compose up --build --detach` â€” PASS;
+- all three services healthy â€” PASS;
+- `docker compose exec backend alembic current` â€” PASS, `20260819_0002 (head)`;
+- `/health`, `/ready`, `/version`, frontend `/`, and proxy `/api/ready` â€” PASS;
+- container TXT ingestion and exact citation validation â€” PASS;
 - backend logs contained route/migration metadata but no source text, credentials, or stack traces;
-- `docker compose down` — PASS; named data volumes retained; and
-- `docker compose ps --all` — PASS; no project containers remained.
+- `docker compose down` â€” PASS; named data volumes retained; and
+- `docker compose ps --all` â€” PASS; no project containers remained.
 
 ### Failures encountered and fixes
 
@@ -981,13 +983,13 @@ Docker/runtime:
 - No internet-facing authentication/authorization or production hardening is claimed.
 - Phase 03 and all later-phase functionality remains absent.
 
-## Independent Phase 02 verification corrections — 2026-08-19
+## Independent Phase 02 verification corrections â€” 2026-08-19
 
 ### Verifier result and scope
 
 - Independent verifier: **PASS_WITH_CHANGES**
 - Critical findings: **none**
-- Current status: **PASS_WITH_CHANGES — corrections implemented locally, follow-up verifier
+- Current status: **PASS_WITH_CHANGES â€” corrections implemented locally, follow-up verifier
   pending**
 - Phase 02 remote CI: **not run** because this branch has not been pushed.
 
@@ -1025,45 +1027,45 @@ Backend from `backend/` with
 `TEST_DATABASE_URL=.../project_assurance_test`, and
 `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
 
-- `uv sync --frozen --all-groups` — PASS
-- `uv run ruff format --check .` — PASS; 31 files already formatted
-- `uv run ruff check .` — PASS
-- Initial `uv run mypy src tests` — FAIL; one redundant cast after citation-format narrowing.
+- `uv sync --frozen --all-groups` â€” PASS
+- `uv run ruff format --check .` â€” PASS; 31 files already formatted
+- `uv run ruff check .` â€” PASS
+- Initial `uv run mypy src tests` â€” FAIL; one redundant cast after citation-format narrowing.
   Removed that cast.
-- Final `uv run mypy src tests` — PASS; no issues in 24 source files
-- Dedicated test-database Alembic `upgrade head` → `downgrade 20260819_0001` → `upgrade head` →
-  `current` — PASS; `20260819_0002 (head)`
-- `uv run pytest -m integration` — PASS; 12 passed, 26 deselected
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 38 passed, 91.45% coverage
-- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.2.0`
-- `uv run pytest -m "not integration"` — PASS; 26 passed, 12 deselected
+- Final `uv run mypy src tests` â€” PASS; no issues in 24 source files
+- Dedicated test-database Alembic `upgrade head` â†’ `downgrade 20260819_0001` â†’ `upgrade head` â†’
+  `current` â€” PASS; `20260819_0002 (head)`
+- `uv run pytest -m integration` â€” PASS; 12 passed, 26 deselected
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 38 passed, 91.45% coverage
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.2.0`
+- `uv run pytest -m "not integration"` â€” PASS; 26 passed, 12 deselected
 
 Frontend from `frontend/`:
 
-- `npm ci` — PASS; 235 packages, 0 reported vulnerabilities
-- `npm run format:check` — PASS
-- `npm run lint` — PASS
-- `npm run typecheck` — PASS
-- initial `npm test` in parallel with the backend coverage run — FAIL; Vitest forks worker timeout,
+- `npm ci` â€” PASS; 235 packages, 0 reported vulnerabilities
+- `npm run format:check` â€” PASS
+- `npm run lint` â€” PASS
+- `npm run typecheck` â€” PASS
+- initial `npm test` in parallel with the backend coverage run â€” FAIL; Vitest forks worker timeout,
   0 tests executed (host load, no frontend source change)
-- sequential rerun `npm test` — PASS; 1 file, 4 tests
-- `npm run build` — PASS
+- sequential rerun `npm test` â€” PASS; 1 file, 4 tests
+- `npm run build` â€” PASS
 
 Docker from repository root:
 
-- `docker compose config` — PASS
-- `docker compose build` — PASS
-- `docker compose up --build --detach` — PASS
-- all three services healthy — PASS
-- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.2.0 Phase 02 — PASS
-- frontend HTTP 200 and `/api/ready` 200 — PASS
-- `docker compose exec backend alembic current` — PASS; `20260819_0002 (head)`
+- `docker compose config` â€” PASS
+- `docker compose build` â€” PASS
+- `docker compose up --build --detach` â€” PASS
+- all three services healthy â€” PASS
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.2.0 Phase 02 â€” PASS
+- frontend HTTP 200 and `/api/ready` 200 â€” PASS
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0002 (head)`
 - a concurrent host-side integration rerun while the full stack was up failed with `MemoryError`;
-  after `docker compose down` and db-only restart, `uv run pytest -m integration` — PASS; 12/12
-- `docker compose down` — PASS
-- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+  after `docker compose down` and db-only restart, `uv run pytest -m integration` â€” PASS; 12/12
+- `docker compose down` â€” PASS
+- `git diff --check` â€” PASS (CRLF/LF conversion warnings only; no whitespace errors)
 
-### Phase 02 closure — 2026-08-19
+### Phase 02 closure â€” 2026-08-19
 
 - Implementation: **PASS**
 - Local verification: **PASS**
@@ -1076,7 +1078,7 @@ budget/scheduler state. Zero Phase 02 CI jobs materialized. Normal and force can
 returned GitHub HTTP 500. No Phase 02 code-related CI failure was observed. GitHub billing was
 not treated as an implementation defect.
 
-## Phase 03 record — 2026-08-19
+## Phase 03 record â€” 2026-08-19
 
 ### Scope completed
 
@@ -1089,7 +1091,7 @@ Implemented grounded Understand only:
   live adapter selected by environment, with bounded timeout/retry and safe `ModelError`
   translation;
 - LangGraph Understand workflow with real conditional skips:
-  load → retrieve → classify → extract → validate provenance → detect contradictions → finalize;
+  load â†’ retrieve â†’ classify â†’ extract â†’ validate provenance â†’ detect contradictions â†’ finalize;
 - every supported fact bound to a Phase 02 citation that already passed exact provenance
   validation; retrieval IDs recorded but not treated as evidence;
 - unknown inspection fields persisted as `support_status=unknown` /
@@ -1097,7 +1099,7 @@ Implemented grounded Understand only:
 - deterministic contradictions for the same category and subject key with incompatible values;
 - document prompt-injection classified as `untrusted_instruction` and not followed as policy;
 - inspectable analysis-run APIs; and
-- application version `0.3.0`, phase `Phase 03 — Understand`.
+- application version `0.3.0`, phase `Phase 03 â€” Understand`.
 
 Examine, item-level human review, durable kill/resume, MCP business operations, watching,
 incremental updates, register publication, and production deployment were not implemented.
@@ -1113,12 +1115,12 @@ incremental updates, register publication, and production deployment were not im
   locked and unused. Human interrupt/resume is not implemented.
 - Frontend was not modified. Version/phase text continues to come from the API.
 
-### Cursor implementation verification — exact commands and final results
+### Cursor implementation verification â€” exact commands and final results
 
 Inspection:
 
-- `git branch --show-current` — `feat/phase-03-understand`
-- Read-only `git status` / `git log` — Phase 02 is on `main` as `d0c2f0f`; Phase 03 work remains
+- `git branch --show-current` â€” `feat/phase-03-understand`
+- Read-only `git status` / `git log` â€” Phase 02 is on `main` as `d0c2f0f`; Phase 03 work remains
   uncommitted on this branch
 - Agent Git write operations: none
 
@@ -1127,50 +1129,50 @@ Backend final gate from `backend/` with
 `TEST_DATABASE_URL=.../project_assurance_test`, and
 `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
 
-- `uv sync --frozen --all-groups` — PASS; 91 packages
-- `uv run ruff format --check .` — PASS
-- `uv run ruff check .` — PASS
-- `uv run mypy src tests` — PASS; 33 files
-- dedicated test-database Alembic `upgrade head` → `downgrade 20260819_0002` → `upgrade head` →
-  `current` — PASS; `20260819_0003 (head)`
-- `uv run pytest -m integration` — PASS; 20 passed
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 61 passed, **92.76%** (gate 90%)
-- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.3.0`
+- `uv sync --frozen --all-groups` â€” PASS; 91 packages
+- `uv run ruff format --check .` â€” PASS
+- `uv run ruff check .` â€” PASS
+- `uv run mypy src tests` â€” PASS; 33 files
+- dedicated test-database Alembic `upgrade head` â†’ `downgrade 20260819_0002` â†’ `upgrade head` â†’
+  `current` â€” PASS; `20260819_0003 (head)`
+- `uv run pytest -m integration` â€” PASS; 20 passed
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 61 passed, **92.76%** (gate 90%)
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.3.0`
 
 Frontend from `frontend/` (no source changes):
 
-- `npm ci` — PASS; 235 packages, 0 reported vulnerabilities
-- `npm run format:check` — PASS
-- `npm run lint` — PASS
-- `npm run typecheck` — PASS
-- initial `npm test` after the backend coverage run — FAIL; Vitest forks worker exited
+- `npm ci` â€” PASS; 235 packages, 0 reported vulnerabilities
+- `npm run format:check` â€” PASS
+- `npm run lint` â€” PASS
+- `npm run typecheck` â€” PASS
+- initial `npm test` after the backend coverage run â€” FAIL; Vitest forks worker exited
   unexpectedly, 0 tests executed (host load, no frontend source change)
-- sequential rerun `npx vitest run` — PASS; 1 file, 4 tests
-- `npm run build` — PASS
+- sequential rerun `npx vitest run` â€” PASS; 1 file, 4 tests
+- `npm run build` â€” PASS
 
 Docker from repository root:
 
-- `docker compose config` — PASS
-- first combined `docker compose build` — FAIL; Docker credential helper
+- `docker compose config` â€” PASS
+- first combined `docker compose build` â€” FAIL; Docker credential helper
   `Not enough memory resources are available to complete this operation`
-- sequential `docker compose build backend` then `docker compose build frontend` — PASS;
+- sequential `docker compose build backend` then `docker compose build frontend` â€” PASS;
   backend image installed `project-assurance-register==0.3.0`
-- cached rerun `docker compose build` — PASS
-- `docker compose up --build --detach` — PASS; all three services healthy
-- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 — PASS
-- frontend HTTP 200 and `/api/ready` 200 — PASS
-- `docker compose exec backend alembic current` — PASS; `20260819_0003 (head)`
-- Aurora ingest + `POST /analysis-runs` — PASS; status `completed`, findings `populated`,
+- cached rerun `docker compose build` â€” PASS
+- `docker compose up --build --detach` â€” PASS; all three services healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 â€” PASS
+- frontend HTTP 200 and `/api/ready` 200 â€” PASS
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0003 (head)`
+- Aurora ingest + `POST /analysis-runs` â€” PASS; status `completed`, findings `populated`,
   production-readiness contradiction `2026-10-30` vs `2026-11-14` with both citations,
   `budget_owner` unknown, injection classified `untrusted_instruction`, stage cost `$0` /
   `zero_deterministic`
-- Harbor ingest + Understand — PASS; different people/dates (`Tomas Reed`,
+- Harbor ingest + Understand â€” PASS; different people/dates (`Tomas Reed`,
   `legacy_retirement=2026-12-04`); `production_readiness` unknown; no Aurora leakage
-- Harbor corpus + Aurora run id — HTTP 404 `analysis_run_not_found`
-- empty corpus Understand — PASS; `findings_status=no_findings`, `no_findings=true`;
+- Harbor corpus + Aurora run id â€” HTTP 404 `analysis_run_not_found`
+- empty corpus Understand â€” PASS; `findings_status=no_findings`, `no_findings=true`;
   retrieve/classify/extract skipped
-- `docker compose down` — PASS
-- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+- `docker compose down` â€” PASS
+- `git diff --check` â€” PASS (CRLF/LF conversion warnings only; no whitespace errors)
 
 ### Understand evidence
 
@@ -1237,7 +1239,7 @@ Docker from repository root:
 Independent verification of Phase 03 found FAIL. Corrections and local re-verification follow.
 Do not begin Phase 04 without separate explicit authorization. Candidate owns Git writes.
 
-## Independent Phase 03 verification — FAIL — 2026-08-19
+## Independent Phase 03 verification â€” FAIL â€” 2026-08-19
 
 Independent verification: **FAIL**
 
@@ -1262,7 +1264,7 @@ to an invented assertion.
 
 - Shared taxonomy `derive_assertions` / extraction rules drive both the deterministic adapter and
   `app.grounding.validate_assertion`.
-- Pipeline: proposal → citation resolver → resolved quote → assertion-to-evidence check →
+- Pipeline: proposal â†’ citation resolver â†’ resolved quote â†’ assertion-to-evidence check â†’
   `SUPPORTED` only on match. Failures become rejected assertions with safe reason codes.
 - Injection text is forced to `untrusted_instruction` after classify, excluded from extract, and
   rejected if still proposed.
@@ -1272,53 +1274,53 @@ to an invented assertion.
   contradiction run/corpus FKs, canonical pair uniqueness, `skip_reason`, and `model_attempt_count`.
 - Canonical stages are always recorded; skipped stages have zero model operations and zero cost.
 
-### Local re-verification of FAIL corrections — PASS — 2026-08-19
+### Local re-verification of FAIL corrections â€” PASS â€” 2026-08-19
 
 Inspection: `feat/phase-03-understand`; no agent Git writes.
 
 Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
 `TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
 
-- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` — PASS
+- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` â€” PASS
 - test-database Alembic: stamp `20260819_0002` after leftover 0003 objects, then
-  `0002 → 0003 → 0002 → 0003`, `current = 20260819_0003 (head)` — PASS
-- `uv run pytest -m integration` — PASS; 25 passed
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 71 passed, **92.93%** (gate 90%)
-- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.3.0`
+  `0002 â†’ 0003 â†’ 0002 â†’ 0003`, `current = 20260819_0003 (head)` â€” PASS
+- `uv run pytest -m integration` â€” PASS; 25 passed
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 71 passed, **92.93%** (gate 90%)
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.3.0`
 
 Frontend from `frontend/` (no source changes for this correction):
 
-- `npm run format:check` / `lint` / `typecheck` — PASS
-- `npm test` — PASS; 4 tests
-- `npm run build` — PASS via `cmd /c` after a paging-file failure; `dist/` produced
+- `npm run format:check` / `lint` / `typecheck` â€” PASS
+- `npm test` â€” PASS; 4 tests
+- `npm run build` â€” PASS via `cmd /c` after a paging-file failure; `dist/` produced
 
 Docker from repository root:
 
-- `docker compose config` — PASS
-- sequential `docker compose build backend` then `docker compose build frontend` — PASS
+- `docker compose config` â€” PASS
+- sequential `docker compose build backend` then `docker compose build frontend` â€” PASS
   (combined frontend build previously crashed Docker/Go with `signal 0xc0000005` / paging file)
-- `docker compose up --build --detach` — PASS; database, backend, and frontend healthy
-- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 — PASS
-- frontend HTTP 200 and `/api/ready` 200 — PASS
-- first `docker compose exec backend alembic current` — `20260819_0003 (head)` while the persistent
+- `docker compose up --build --detach` â€” PASS; database, backend, and frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.3.0 Phase 03 â€” PASS
+- frontend HTTP 200 and `/api/ready` 200 â€” PASS
+- first `docker compose exec backend alembic current` â€” `20260819_0003 (head)` while the persistent
   volume still had the **old** 0003 columns (same revision ID edited in place)
 - recovery: drop leftover `analysis_runs`/`facts`/`contradictions`/`stage_events`,
-  `alembic stamp 20260819_0002`, `alembic upgrade head` — PASS; `model_attempt_count`,
+  `alembic stamp 20260819_0002`, `alembic upgrade head` â€” PASS; `model_attempt_count`,
   `skip_reason`, `ck_facts_supported_requires_provenance`, `uq_source_blocks_id_corpus`,
   `fk_facts_source_block_corpus` present; `current = 20260819_0003 (head)`
-- Aurora Understand on already-ingested corpus — PASS; `completed`/`populated`;
+- Aurora Understand on already-ingested corpus â€” PASS; `completed`/`populated`;
   `production_readiness` `2026-10-30` vs `2026-11-14` `conflicting_dates`; `Elena Marlow`;
   `budget_owner` unknown; injection `untrusted_instruction` / not relevant; no supported
   compliant/approval fact; all seven canonical stages; `retrieval_mode=retrieved`; cost `$0`
-- Harbor Understand — PASS; `Tomas Reed`, `legacy_retirement=2026-12-04`; no Aurora leakage;
+- Harbor Understand â€” PASS; `Tomas Reed`, `legacy_retirement=2026-12-04`; no Aurora leakage;
   `production_readiness` unknown
-- Harbor corpus + Aurora run id — HTTP 404 `analysis_run_not_found`
-- empty corpus Understand — PASS; `findings_status=no_findings`; skipped load/retrieve/classify/
+- Harbor corpus + Aurora run id â€” HTTP 404 `analysis_run_not_found`
+- empty corpus Understand â€” PASS; `findings_status=no_findings`; skipped load/retrieve/classify/
   extract with `skip_reason=empty_corpus` and zero ops/cost
-- blank weather TXT Understand — PASS; `no_findings`; extract skipped `no_relevant_blocks`
-- `docker compose down` — PASS; named volumes retained
-- `docker compose ps --all` — PASS; no project containers
-- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+- blank weather TXT Understand â€” PASS; `no_findings`; extract skipped `no_relevant_blocks`
+- `docker compose down` â€” PASS; named volumes retained
+- `docker compose ps --all` â€” PASS; no project containers
+- `git diff --check` â€” PASS (CRLF/LF conversion warnings only; no whitespace errors)
 
 ### Failures encountered during local re-verification
 
@@ -1331,7 +1333,7 @@ Docker from repository root:
   Stamp-to-0002 plus drop leftover Phase 03 tables, then upgrade, restored the new schema
   without re-ingesting PDFs.
 
-## Independent Phase 03 follow-up — NO-GO — 2026-08-19
+## Independent Phase 03 follow-up â€” NO-GO â€” 2026-08-19
 
 Independent follow-up: **NO-GO**
 
@@ -1356,15 +1358,221 @@ Fixes:
 
 Local backend re-verification of this follow-up (not independent PASS):
 
-- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` — PASS
+- `uv run ruff format --check .` / `uv run ruff check .` / `uv run mypy src tests` â€” PASS
 - `uv run pytest tests/test_model_boundary.py tests/test_grounding.py tests/test_understand_integration.py`
-  — PASS; 36 passed
-- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 76 passed, **93.03%** (gate 90%)
-- `git diff --check` — PASS (CRLF/LF conversion warnings only; no whitespace errors)
+  â€” PASS; 36 passed
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 76 passed, **93.03%** (gate 90%)
+- `git diff --check` â€” PASS (CRLF/LF conversion warnings only; no whitespace errors)
 - Frontend/Docker full-stack gates were not rerun; these corrections do not touch those areas.
 
-## Current next safe step
+## Independent Phase 03 final follow-up â€” GO â€” 2026-08-19
 
-Complete candidate-owned Git writes on `feat/phase-03-understand` when ready.
-Independent verification remains NO-GO until a later follow-up. Do not begin Phase 04
-without separate explicit authorization.
+Independent final follow-up: **GO**
+
+The original independent FAIL (grounding) and the subsequent correction NO-GO remain historical
+record. They are not erased. After the later fixes, independent final follow-up verified Phase 03
+as GO.
+
+- Phase 03 committed
+- PR #3 merged to `main`
+- merge commit `ceb2bf0`
+- remote CI: PASS (2 successful checks)
+
+This GO is the current Phase 03 verification status. It does not authorize Phase 05.
+
+## Phase 04 record â€” 2026-08-19
+
+### Scope completed
+
+Implemented grounded Examine only:
+
+- Alembic revision `20260819_0004` for `examination_runs`, `findings`, and
+  `examination_stage_events`, all corpus-scoped, without editing migration `20260819_0003`;
+- ruleset `software-project-assurance.v1` as nine named-evaluator rules (not corpus-name
+  special-casing and not a generic expression engine);
+- LangGraph Examine workflow with real skips: load understanding â†’ select rules â†’ evaluate
+  rules â†’ validate evidence â†’ summarize findings â†’ finalize;
+- findings consume only Phase 03 supported facts and grounded contradictions; retrieval hits,
+  rejected assertions, and raw source text cannot satisfy a rule;
+- outcomes `pass` / `fail` / `warning` / `unknown`; missing evidence is never converted to pass;
+- inspectable examination-run APIs; and
+- application version `0.4.0`, phase `Phase 04 â€” Examine`.
+
+Human review, durable kill/resume, MCP business operations, watching, incremental updates,
+register publication, and production deployment were not implemented.
+
+### Cursor implementation verification â€” exact commands and final results
+
+Inspection: `feat/phase-04-examine`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- `uv sync --frozen --all-groups` â€” PASS
+- `uv run ruff format --check .` â€” PASS after `uv run ruff format .`
+- `uv run ruff check .` â€” PASS
+- `uv run mypy src tests` â€” PASS; 41 source files
+- dedicated test-database Alembic `upgrade head` â†’ `downgrade 20260819_0003` â†’ `upgrade head` â†’
+  `current` â€” PASS; `20260819_0004 (head)`
+- `uv run pytest -m integration` â€” PASS; 33 passed
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 98 passed, **91.96%** (gate 90%)
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.4.0`
+
+Frontend from `frontend/` (no source changes):
+
+- `npm ci` â€” PASS; 235 packages, 0 reported vulnerabilities
+- `npm run format:check` / `lint` / `typecheck` â€” PASS
+- `npm test` â€” PASS; 1 file, 4 tests
+- `npm run build` â€” PASS
+
+Docker from repository root:
+
+- `docker compose config --quiet` â€” PASS
+- sequential `docker compose build backend` then `docker compose build frontend` â€” PASS;
+  backend image installed `project-assurance-register==0.4.0`
+- `docker compose up --build --detach` â€” PASS; database, backend, and frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.4.0 Phase 04 â€” PASS
+- frontend HTTP 200 and `/api/ready` 200 â€” PASS
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0004 (head)`
+- first container ingest attempt used an incomplete file walk and hid curl failures; rerun used
+  fixture manifests
+- Aurora Understand + Examine â€” PASS; `completed`/`populated`; findings
+  `spa.milestone.production-readiness=fail` (2026-10-30 vs 2026-11-14, both citations),
+  `spa.contradiction.open=fail`, `spa.status.clarity=warning` (amber),
+  `spa.ownership.sponsor=pass`, `spa.ownership.budget=unknown`,
+  `spa.ownership.security-signoff=fail` (unassigned); counts pass=4 fail=3 warn=1 unknown=1;
+  stage cost `$0`
+- Harbor Understand + Examine â€” PASS; different profile with no FAIL/WARNING:
+  `spa.contradiction.open=pass`, `spa.status.clarity=pass` (green),
+  `spa.milestone.production-readiness=unknown`, `spa.dependency.evidence=unknown`;
+  counts pass=5 fail=0 warn=0 unknown=4; no Aurora names/dates
+- Harbor corpus + Aurora examination id â€” HTTP 404 `examination_run_not_found`
+- empty corpus Examine â€” PASS; `findings_status=no_findings`, evaluated_rule_count=0
+- `docker compose down` â€” PASS; named volumes retained
+- `docker compose ps --all` â€” PASS; no project containers
+
+### Examine evidence
+
+- Ruleset IDs/version are stable and configuration-driven. Changing `value_outcomes` for amber
+  status changes WARNING to FAIL without rewriting the evaluator.
+- PASS requires supported facts plus copied Phase 02 citations.
+- FAIL for production-readiness consumes the Phase 03 contradiction record and both fact citations.
+- WARNING is grounded amber status.
+- UNKNOWN is missing required supported evidence and is never converted to PASS.
+- Unrelated facts, unsupported/rejected facts, and retrieval-only context cannot satisfy a rule.
+- Injection text cannot add or override a rule.
+- Harbor executes the same ruleset without corpus-name branching and yields a different profile.
+
+### Failures encountered
+
+- PowerShell 5 does not accept `&&` or `Invoke-WebRequest -SkipHttpErrorCheck`.
+- Combined first Docker smoke ingested files without the fixture manifest and discarded curl
+  output, producing false no-findings. Manifest-based ingest then produced the expected Aurora
+  mix and Harbor profile.
+- mypy required typed helpers around LangGraph Examine state payloads.
+
+### Security verification
+
+- No key, credential, personal information, resume, employer/NDA data, or private source was
+  added.
+- Cross-corpus examination lookups return not found without traceback.
+- Prompt-injection source text cannot define or override examination rules.
+- Destructive integration cleanup still requires the exact disposable database
+  `project_assurance_test`, a different application database name, and
+  `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`.
+
+### Phase 04 limitations
+
+- Examine runs synchronously in the API process. There is no worker queue, PostgreSQL
+  checkpointer, or kill/resume.
+- Rules are centrally versioned Python data plus named evaluators. There is no user-upload rule
+  editor or generic expression engine.
+- Register-state examination is not implemented because no published register exists yet.
+- Frontend remains the Phase 01 status shell.
+- Database-level mutation-prevention triggers or restricted roles are still not implemented.
+- No internet-facing authentication/authorization or production hardening is claimed.
+
+Independent verification of Phase 04 has not been requested. Do not begin Phase 05 without
+separate explicit authorization. Candidate owns Git writes.
+
+## Independent Phase 04 verification â€” FAIL / NO-GO â€” 2026-08-19
+
+Independent verification: **FAIL / NO-GO**
+
+Local initial implementation PASS remains. This independent result is not PASS.
+
+Verified blockers (correction in progress; do not begin Phase 05):
+
+- Subject-specific rules matched `subject_key` without requiring the rule's category, so an
+  unrelated SUPPORTED fact could satisfy production-readiness.
+- A contradiction could satisfy a subject/category rule when only one grounded side matched.
+- `spa.contradiction.open` treated zero contradictions as PASS and attached arbitrary supported
+  facts as evidence, violating silence-is-not-compliance.
+- The same Aurora production-readiness contradiction was counted by both the specific rule and
+  the generic open-contradiction rule.
+- Finding `fact_ids` / `contradiction_ids` / `citations` were unconstrained JSON, so random UUIDs
+  could persist as evidence. The weak CHECK test failed on blank `rule_id`, not the evidence
+  reference.
+- UNKNOWN findings were not prevented from carrying evidence by a meaningful contract.
+- Examine compared copied citation dictionaries instead of rerunning Phase 02 exact provenance
+  and Phase 03 assertion grounding.
+- `rule_evaluation_count=9` was recorded on stages that do not evaluate rules.
+- Phase 03 current status still described independent verification as FAIL/NO-GO after the later
+  GO, PR #3 merge `ceb2bf0`, and remote CI PASS.
+
+## Phase 04 correction pass â€” in progress â€” 2026-08-19
+
+Correction is in progress against the FAIL / NO-GO blockers above. Uncommitted migration
+`20260819_0004` was edited in place. Alembic does not reapply the same revision against a
+database already stamped at the old 0004 JSON-evidence schema.
+
+Local recovery used on the disposable test database and the local Compose application database
+(Phase 04 examination objects only; corpora/facts retained on the application database):
+
+1. Drop leftover Phase 04 objects: `finding_fact_evidence`, `finding_contradiction_evidence`,
+   `examination_stage_events`, `findings`, `examination_runs`, and
+   `uq_contradictions_id_run_corpus` if present.
+2. `alembic stamp 20260819_0003`
+3. `alembic upgrade head` to the corrected `20260819_0004`
+
+Do not run that recovery against non-test data silently.
+
+### Local correction verification
+
+Inspection: `feat/phase-04-examine`; agent Git write operations: none. Frontend source was not
+changed and frontend gates were not rerun.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- focused `uv run pytest tests/test_ruleset.py tests/test_examine_integration.py tests/test_examine_api.py tests/test_grounding.py`
+  â€” PASS; 42 passed
+- `uv run ruff format --check .` â€” PASS
+- `uv run ruff check .` â€” PASS
+- `uv run mypy src tests` â€” PASS; 41 source files
+- test-database recovery then Alembic `0003 â†’ 0004 â†’ 0003 â†’ 0004`,
+  `current = 20260819_0004 (head)` â€” PASS
+- `uv run pytest -m integration` â€” PASS; 38 passed
+- `uv run pytest --cov=app --cov-report=term-missing` â€” PASS; 112 passed, **91.80%** (gate 90%)
+- `uv build` â€” PASS; sdist and wheel for `project_assurance_register-0.4.0`
+
+Docker from repository root:
+
+- `docker compose config --quiet` â€” PASS
+- `docker compose build backend` â€” PASS; image installed `project-assurance-register==0.4.0`
+- frontend image reused; no frontend rebuild
+- `docker compose up --detach` â€” PASS; database, backend, and frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.4.0 Phase 04 â€” PASS
+- frontend HTTP 200 â€” PASS
+- `docker compose exec backend alembic current` â€” PASS; `20260819_0004 (head)`
+- Aurora Understand + Examine â€” PASS; `spa.milestone.production-readiness=fail` with both
+  citations; `spa.contradiction.open=pass` via process attestation with no facts; counts
+  pass=5 fail=2 warn=1 unknown=1 (the Aurora date conflict is not counted twice)
+- Harbor Understand + Examine â€” PASS; `spa.contradiction.open=pass` with empty fact evidence;
+  `production_readiness` unknown; no Aurora leakage; counts pass=5 fail=0 warn=0 unknown=4
+- Harbor corpus + Aurora examination id â€” HTTP 404 `examination_run_not_found`
+- empty corpus Examine â€” PASS; `findings_status=no_findings`
+- `docker compose down` â€” PASS; named volumes retained
+- `docker compose ps --all` â€” PASS; no project containers
+
+Independent re-verification of this correction is not complete. Do not begin Phase 05.

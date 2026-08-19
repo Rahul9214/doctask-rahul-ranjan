@@ -35,7 +35,9 @@ async def phase02_service(
     async with engine.begin() as connection:
         await connection.execute(
             text(
-                "TRUNCATE contradictions, facts, stage_events, analysis_runs, "
+                "TRUNCATE finding_fact_evidence, finding_contradiction_evidence, "
+                "examination_stage_events, findings, examination_runs, "
+                "contradictions, facts, stage_events, analysis_runs, "
                 "source_blocks, source_versions, sources, corpora CASCADE"
             )
         )
@@ -47,7 +49,9 @@ async def phase02_service(
         async with engine.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE contradictions, facts, stage_events, analysis_runs, "
+                    "TRUNCATE finding_fact_evidence, finding_contradiction_evidence, "
+                    "examination_stage_events, findings, examination_runs, "
+                    "contradictions, facts, stage_events, analysis_runs, "
                     "source_blocks, source_versions, sources, corpora CASCADE"
                 )
             )

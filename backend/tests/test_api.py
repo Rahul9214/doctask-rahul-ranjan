@@ -74,11 +74,12 @@ def test_version_is_truthful_about_phase_scope() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "app_version": "0.3.0",
-        "current_phase": "Phase 03 — Understand",
+        "app_version": "0.4.0",
+        "current_phase": "Phase 04 — Examine",
         "implementation_status": (
-            "Grounded Understand is implemented: classification, fact extraction, exact "
-            "provenance validation, contradiction detection, and no-bluffing; Examine, human "
-            "review, durable resume, MCP business operations, and watching are not implemented."
+            "Grounded Understand and Examine are implemented: classification, fact extraction, "
+            "exact provenance validation, contradiction detection, versioned assurance rules, "
+            "and no-bluffing findings; human review, durable resume, MCP business operations, "
+            "and watching are not implemented."
         ),
     }

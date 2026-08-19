@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import UploadFile
 from starlette.datastructures import Headers
 
+from app.examine_service import ExamineService
 from app.model_gateway import DeterministicModelAdapter, ModelAdapter
 from app.models import Corpus
 from app.parsers import SourceFormat
@@ -56,3 +57,12 @@ def make_understand(
         phase02,
         adapter or DeterministicModelAdapter(),
     )
+
+
+def make_examine(
+    phase02: Phase02Service,
+    adapter: ModelAdapter | None = None,
+    understand: UnderstandService | None = None,
+) -> ExamineService:
+    resolved = understand or make_understand(phase02, adapter)
+    return ExamineService(phase02.session_factory, phase02, resolved)
