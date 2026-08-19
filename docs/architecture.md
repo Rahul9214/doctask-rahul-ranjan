@@ -2,15 +2,21 @@
 
 ## Status
 
-**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, and Phase 03 Understand are implemented. Independent Phase 03 verification FAIL is retained: supported facts now require citation validity plus assertion-to-evidence validation. Local re-verification of that correction PASS.**
+**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, and
+Phase 04 Examine are implemented.** Independent Phase 03 FAIL (grounding) and follow-up NO-GO
+remain historical record. Phase 03 current status is independent final follow-up GO: committed,
+PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 local initial implementation PASS;
+independent verification FAIL / NO-GO; correction in progress. Examine consumes grounded Phase 03
+records and revalidates Phase 02 provenance before persisting definitive findings.
 
 The executable system now includes corpus-scoped application-immutable source metadata, mounted source-file
 storage, streamed hashing, PDF/DOCX/Markdown/TXT parsers, normalized source blocks, exact citation
 resolution, deterministic pgvector retrieval, a model boundary with a keyless deterministic adapter,
-and a LangGraph Understand workflow that persists grounded facts, contradictions, unknowns, and
-stage events. Register publication, Examine rules, human review, MCP business tools, durable
-workflow resume, incremental updates, and the watcher remain planned. Implementation evidence may
-simplify or revise those plans; revisions are recorded in `PROGRESS.md`.
+a LangGraph Understand workflow that persists grounded facts, contradictions, unknowns, and
+stage events, and a LangGraph Examine workflow that persists versioned-rule findings and stage
+events. Register publication, human review, MCP business tools, durable workflow resume,
+incremental updates, and the watcher remain planned. Implementation evidence may simplify or
+revise those plans; revisions are recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -45,7 +51,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01–03 runtime
+## Implemented Phase 01–04 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -55,28 +61,32 @@ flowchart LR
     Nginx --> API[FastAPI]
     API --> P2[Phase02Services]
     API --> P3[UnderstandService]
+    API --> P4[ExamineService]
     P3 --> Graph[LangGraphUnderstand]
+    P4 --> ExamineGraph[LangGraphExamine]
     Graph --> Model[ModelAdapter]
     P2 --> DB[(PostgreSQL17_pgvector)]
     P3 --> DB
+    P4 --> DB
     P2 --> Store[MountedSourceStore]
     Alembic[AlembicStartupMigration] --> DB
 ```
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
-- FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, and Understand
-  analysis-run routes.
+- FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
+  analysis-run, and Examine examination-run routes.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
 - SQLAlchemy creates an async engine/session factory during application lifespan.
 - Alembic revision `20260819_0001` enables `vector`; `20260819_0002` creates corpus/source tables;
-  `20260819_0003` creates `analysis_runs`, `facts`, `contradictions`, and `stage_events`.
+  `20260819_0003` creates `analysis_runs`, `facts`, `contradictions`, and `stage_events`;
+  `20260819_0004` creates `examination_runs`, `findings`, and `examination_stage_events`.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
-- LangGraph executes Understand stages with real conditional skips. The PostgreSQL checkpointer and
-  MCP remain locked but unused. Human interrupt/resume is not implemented.
+- LangGraph executes Understand and Examine stages with real conditional skips. The PostgreSQL
+  checkpointer and MCP remain locked but unused. Human interrupt/resume is not implemented.
 
 ## Implemented Phase 02 data layer
 
@@ -186,12 +196,11 @@ Implemented now:
 - stream bounded uploads to durable file storage;
 - create/inspect corpora, logical sources, immutable versions, and blocks;
 - validate exact citations and run corpus-scoped deterministic retrieval;
-- create and inspect Understand analysis runs, facts, contradictions, and stage events.
+- create and inspect Understand analysis runs, facts, contradictions, and stage events;
+- create and inspect Examine runs, findings, summaries, and stage events.
 
 Later planned responsibilities:
 
-- create rules and runs;
-- expose run status and visible stage events;
 - expose pending review items and explicit item-level decision operations;
 - resume workflows after accepted human decisions;
 - serve immutable source snippets/locators safely; and
@@ -234,20 +243,59 @@ Skipped conceptual stages still persist `StageEvent` rows (`empty_corpus`, `no_r
   `model_operation_count=0`, and `estimated_cost_usd=0`. `model_operation_count` is logical;
   `model_attempt_count` is provider HTTP attempts.
 
-Durable kill/resume, human interrupt, and Examine stages remain planned.
+Durable kill/resume and human interrupt remain planned.
+
+### LangGraph Examine workflow
+
+Implemented in-process for Phase 04 (not a separate worker, and not PostgreSQL-checkpointed):
+
+```mermaid
+flowchart TD
+    StartExam[ExaminationCreated] --> LoadU[LoadGroundedUnderstanding]
+    LoadU --> Select[SelectApplicableRules]
+    Select -->|"no_supported_facts"| Empty[NoFindingsEmptyResult]
+    Select -->|"applicable"| Eval[EvaluateRulesDeterministically]
+    Eval --> ValidateF[ValidateFindingEvidence]
+    ValidateF --> Summarize[SummarizeOutcomes]
+    Summarize --> DoneExam[FinalizePersistedExamination]
+    Empty --> DoneExam
+```
+
+- Examine loads Phase 03 facts and contradictions only. It does not re-extract, re-classify, or
+  treat pgvector hits as evidence.
+- Subject-specific rules match both the rule's category and `subject_key`. A contradiction matches
+  such a rule only when both grounded fact sides satisfy that category and subject.
+- Ruleset `software-project-assurance.v1` is central versioned data plus named evaluators. Document
+  text cannot add, remove, or override a rule.
+- A rule applies only when the analysis run contains at least one supported fact. Otherwise the
+  applicable-rule count is zero and the run is an explicit `no_findings` result.
+- PASS, FAIL, and WARNING findings that use grounded-fact evidence must cite supported facts (and
+  contradictions when used). `spa.contradiction.open` may PASS with a deterministic
+  `detect_contradictions` completed attestation when no unconsumed contradictions remain; that is
+  process evidence, not source provenance, and attaches no facts. UNKNOWN explains the missing
+  required evidence and must not claim citations, facts, or contradictions.
+- Before a definitive finding is persisted, Examine reloads the same-run fact, reruns the Phase 02
+  exact citation resolver against original bytes, and reruns Phase 03 assertion grounding. Persisted
+  citation JSON is not trusted merely because it is well-formed.
+- Canonical stages are always inspectable. `rule_evaluation_count` is recorded only on
+  `evaluate_rules`. Deterministic Examine records zero model operations and
+  `cost_basis=zero_deterministic`.
 
 ### PostgreSQL with pgvector
 
 Implemented now: corpus/source/version/block metadata, analysis runs, facts, contradictions, stage
-events, composite corpus constraints, fact-to-source-block corpus FK, supported-fact provenance
-check, contradiction run/corpus composite FKs with canonical pair uniqueness, deterministic vectors,
-HNSW indexing, and metadata-filtered retrieval.
+events, examination runs, findings, finding fact evidence, finding contradiction evidence,
+examination stage events, composite corpus constraints, fact-to-source-block corpus FK,
+supported-fact provenance check, contradiction run/corpus composite FKs with canonical pair
+uniqueness, examination-run analysis-run/corpus composite FK, finding outcome/evidence-kind checks,
+finding-to-fact and finding-to-contradiction composite FKs that reject cross-run and cross-corpus
+evidence, deterministic vectors, HNSW indexing, and metadata-filtered retrieval.
 
 Later planned responsibilities:
 
 - LangGraph checkpoints and durable job claiming;
 - idempotency keys and operation results;
-- rules, findings, proposed change sets, and human decisions;
+- proposed change sets and human decisions;
 - published register versions and item hashes; and
 - append-only change-attribution events.
 
@@ -308,10 +356,20 @@ Implemented in Phase 03:
 - `Contradiction`: incompatible supported facts with both sides cited.
 - `StageEvent`: stage name, timing, model operation count, token/cost fields, and failure state.
 
+Implemented in Phase 04:
+
+- `ExaminationRun`: corpus-scoped Examine execution bound to one analysis run, ruleset/graph
+  versions, outcome counts, status, error, and inspectable result payload.
+- `Finding`: one rule evaluation with outcome, severity, structured reason, fact/contradiction
+  references, and copied Phase 02 citations.
+- `ExaminationStageEvent`: Examine stage name, timing, rule-evaluation count, zero deterministic
+  cost, skip reason, and failure state.
+
+Rules live in versioned application configuration (`software-project-assurance.v1`), not a
+user-upload table. A user-supplied rule editor is not implemented.
+
 Planned for later phases:
 
-- `RuleSet` and `Rule`: user-supplied versioned examination configuration.
-- `Finding`: rule result, severity/rationale, and source/register locations.
 - `RegisterItem`: stable assurance item with canonical serialized content.
 - `ChangeSet` and `ChangeItem`: immutable proposals and their before/after hashes.
 - `ReviewDecision`: human actor, item, approve/reject decision, optional reason, and timestamp.
@@ -433,22 +491,54 @@ Taxonomy `software-project-assurance.v1` is configuration, not corpus-name logic
 project identity, owner/accountability, milestone/date, status, risk, decision, dependency, and
 control/assurance. Document prompt-injection text is untrusted evidence.
 
-Examine, register drafting, and human review remain later phases.
+Register drafting and human review remain later phases.
 
 ## Examine movement
 
-Rules are versioned user data with fields such as applicability, target, condition, severity, expected evidence, and rationale.
+Implemented stages:
 
-Planned stages:
+1. load the completed same-corpus Understand run, supported facts, unknown inspection fields, and
+   grounded contradictions;
+2. select the versioned ruleset when supported evidence exists; otherwise record an explicit
+   no-findings result after a zero applicable-rule count;
+3. evaluate each selected rule with a named deterministic evaluator;
+4. validate that PASS/FAIL/WARNING grounded-fact findings reference supported facts from the same
+   analysis run and corpus, revalidate those facts through the Phase 02 exact citation resolver and
+   Phase 03 assertion-to-evidence check, that contradiction findings revalidate both sides, and that
+   UNKNOWN findings do not claim evidence. Process-attestation PASS is allowed only for completed
+   same-run `detect_contradictions` with zero remaining unconsumed contradictions and no attached
+   facts;
+5. summarize pass/fail/warning/unknown counts without double-counting a contradiction already
+   consumed by a more specific rule; and
+6. persist an inspectable examination run with FK-backed fact and contradiction evidence. API
+   citations are derived from those referenced facts.
 
-1. determine applicability;
-2. evaluate source evidence;
-3. evaluate proposed register state;
-4. validate finding provenance;
-5. deduplicate related findings; and
-6. report violated, satisfied, not-applicable, or unsupported outcomes.
+Ruleset `software-project-assurance.v1` covers ownership, status clarity, production-readiness
+consistency, security-signoff assignment, budget ownership, dependency evidence, control/assurance
+evidence, and remaining open contradictions. Evaluators consume Phase 03 records only.
 
-An honest no-findings result requires a completed applicable-rule count and zero violated findings. A skipped or failed examination must never be reported as no findings.
+Examine evidence is one of:
+
+- **source evidence** — Phase 02 exact provenance over original bytes. Examine never treats copied
+  citation JSON as the authoritative relationship.
+- **grounded fact evidence** — FK references to same-run/same-corpus Phase 03 SUPPORTED facts and
+  contradictions. API citations are derived from those facts after revalidation.
+- **deterministic analysis-stage attestation** — same-run/same-corpus completed
+  `detect_contradictions` stage proving contradiction detection finished. This is process evidence,
+  not source provenance.
+
+Outcomes:
+
+- `pass` — required supported evidence is present and satisfies the rule, or contradiction
+  detection is attested complete with no remaining unconsumed contradictions;
+- `fail` — grounded conflicting values, a remaining open contradiction, or an explicit unassigned
+  owner;
+- `warning` — grounded degraded status (amber) that is not a hard failure;
+- `unknown` — required supported evidence is absent. Silence is not compliance. UNKNOWN carries no
+  fabricated evidence.
+
+A skipped or failed examination is never reported as no findings. Register-state examination is
+not implemented because no published register exists yet.
 
 ## Incremental stay-alive movement
 
@@ -509,14 +599,15 @@ Planned behavior 9 and additional idempotency evidence:
 
 Document prompt-injection defense is behavior 8. Phase 03 implements the Understand-level
 treatment: source text is wrapped as untrusted evidence, cannot redefine system behavior, cannot
-disable provenance, and cannot mark the project compliant. Full tool-call/self-approval defense
-remains later because those operations do not exist yet.
+disable provenance, and cannot mark the project compliant. Phase 04 extends this: injection text
+cannot become an examination rule or override evaluator behavior. Full tool-call/self-approval
+defense remains later because those operations do not exist yet.
 
 Trust order:
 
 1. system policy and deterministic validators;
 2. explicit real-human decisions submitted through the review operation;
-3. versioned user rule configuration;
+3. versioned examination ruleset configuration;
 4. application metadata; and
 5. untrusted document text.
 
@@ -542,6 +633,10 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 - Unsupported claims remain explicit and cannot be rendered as sourced facts.
 - Contradictory evidence remains visible until a human decision; it is not silently reconciled.
 - `COMPLETED` requires a durable published version, applied-decision audit, and successful provenance/hash verification.
+- Examination findings that are PASS, FAIL, or WARNING with grounded-fact evidence require supported
+  Phase 03 facts whose citations revalidate through Phase 02 exact provenance and Phase 03
+  assertion-to-evidence matching. Missing evidence is UNKNOWN. Retrieval hits and unsupported
+  assertions cannot satisfy a rule. Process-attestation PASS attaches no source or fact evidence.
 - Examination failure is not “no findings.”
 - A watcher parse failure is not “no change.”
 - Errors expose safe cause/remedy information without source contents or secrets.
@@ -551,10 +646,11 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 
 ## Observability and cost
 
-Behavior 10 remains a strong differentiator. Phase 03 persists durable `StageEvent` rows with stage
-name, start/end/duration, skip reason when skipped, logical `model_operation_count`, provider
-`model_attempt_count`, token fields when available, estimated cost or honest `zero_deterministic` /
-`unavailable`, and failure state. No observability UI exists.
+Behavior 10 remains a strong differentiator. Phase 03 persists durable `StageEvent` rows and
+Phase 04 persists `ExaminationStageEvent` rows with stage name, start/end/duration, skip reason
+when skipped, logical `model_operation_count`, provider `model_attempt_count`, rule-evaluation
+count only on `evaluate_rules` (zero on other Examine stages), token fields when available, estimated cost or honest
+`zero_deterministic` / `unavailable`, and failure state. No observability UI exists.
 
 ## Keyless test architecture
 
@@ -563,8 +659,8 @@ a compact rule/regex Software Project Assurance extractor with intentionally lim
 coverage. It is not general-purpose semantic reasoning. The live OpenAI-compatible provider remains
 separately configurable. Every provider output still passes citation resolution and
 assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 citation validator, the
-grounding validator, LangGraph Understand transitions, PostgreSQL/pgvector, and FastAPI. Worker
-kill/resume, concurrency publication, and MCP transport remain later.
+grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, and FastAPI.
+Worker kill/resume, concurrency publication, and MCP transport remain later.
 
 Fixtures must include:
 

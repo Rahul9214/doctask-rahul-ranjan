@@ -10,17 +10,18 @@ Do not implement Task 2, Task 3, Task 4, or extra credit. Task 4 video/write-up/
 
 ## Current implementation state
 
-Phases 01, 02, and 03 implement and locally verify the development foundation, the deterministic
-grounded-data layer, and the Understand movement: corpus-scoped source versions/blocks that are
-immutable by application contract, streamed SHA-256 ingestion, PDF/DOCX/Markdown/TXT parsers,
-normalized blocks, exact citation validation, local file storage, deterministic pgvector retrieval,
-a configurable model boundary with a keyless deterministic adapter, a LangGraph Understand workflow,
-classification, grounded fact extraction, contradiction detection, unknown/insufficient-evidence
-representation, and inspectable analysis-run APIs. Database-level mutation-prevention triggers or
-restricted roles are not implemented.
+Phases 01, 02, 03, and 04 implement and locally verify the development foundation, the deterministic
+grounded-data layer, the Understand movement, and the Examine movement: corpus-scoped source
+versions/blocks that are immutable by application contract, streamed SHA-256 ingestion,
+PDF/DOCX/Markdown/TXT parsers, normalized blocks, exact citation validation, local file storage,
+deterministic pgvector retrieval, a configurable model boundary with a keyless deterministic
+adapter, a LangGraph Understand workflow, classification, grounded fact extraction, contradiction
+detection, unknown/insufficient-evidence representation, inspectable analysis-run APIs, a versioned
+assurance ruleset, a LangGraph Examine workflow, and inspectable examination-run APIs.
+Database-level mutation-prevention triggers or restricted roles are not implemented.
 
-Examine workflow, MCP business server, watcher, human-review flow, durable workflow resume,
-incremental processing, register publication, and a full measurement system are not implemented yet.
+MCP business server, watcher, human-review flow, durable workflow resume, incremental processing,
+register publication, and a full measurement system are not implemented yet.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 

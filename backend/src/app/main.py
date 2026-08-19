@@ -17,6 +17,7 @@ from app.db import (
     create_session_factory,
 )
 from app.errors import ModelError, NotFoundError, Phase02Error, ValidationError
+from app.examine_service import ExamineService
 from app.model_gateway import ModelAdapter, create_model_adapter
 from app.request_limits import UploadRequestSizeGuard
 from app.services import Phase02Service
@@ -40,6 +41,7 @@ def create_app(
     readiness_probe: ReadinessProbe | None = None,
     phase02_service: Phase02Service | None = None,
     understand_service: UnderstandService | None = None,
+    examine_service: ExamineService | None = None,
     model_adapter: ModelAdapter | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
@@ -63,12 +65,18 @@ def create_app(
             ),
         )
         adapter = model_adapter or create_model_adapter(app_settings)
-        application.state.phase02_service = resolved_phase02
-        application.state.understand_service = understand_service or UnderstandService(
+        resolved_understand = understand_service or UnderstandService(
             resolved_phase02.session_factory,
             resolved_phase02,
             adapter,
             app_settings,
+        )
+        application.state.phase02_service = resolved_phase02
+        application.state.understand_service = resolved_understand
+        application.state.examine_service = examine_service or ExamineService(
+            resolved_phase02.session_factory,
+            resolved_phase02,
+            resolved_understand,
         )
         yield
         await engine.dispose()
@@ -77,8 +85,8 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 03 grounded Understand workflow over deterministic ingestion and provenance. "
-            "Examine, human review, durable resume, and MCP business operations "
+            "Phase 04 grounded Examine workflow over Phase 03 Understand. "
+            "Human review, durable resume, and MCP business operations "
             "are not implemented."
         ),
         lifespan=lifespan,

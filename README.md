@@ -2,15 +2,12 @@
 
 ## Current status
 
-**Phase 03 — Understand: local re-verification PASS after independent verification FAIL;
-independent follow-up NO-GO is retained.** Independent verification found that a valid but
-unrelated citation could previously support a fabricated assertion. Citation validity plus
-assertion-to-evidence validation is now required. A later follow-up found failed-retry attempt
-undercount and equivalent-value contradiction comparison; those corrections are in this tree.
-The independent FAIL and follow-up NO-GO records are retained in `PROGRESS.md`. Independent
-verification is not PASS.
+**Phase 04 — Examine: local initial implementation PASS; independent verification FAIL / NO-GO;
+correction in progress.** Phase 03 historical independent FAIL and follow-up NO-GO remain in
+`PROGRESS.md`. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged
+to `main` as `ceb2bf0`, remote CI PASS (2 successful checks).
 
-The repository now provides grounded Understand over the Phase 02 data layer:
+The repository now provides grounded Understand and Examine over the Phase 02 data layer:
 
 - corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
   application contract and API/service behavior;
@@ -22,13 +19,16 @@ The repository now provides grounded Understand over the Phase 02 data layer:
 - `AnalysisRun`, `Fact`, `Contradiction`, and `StageEvent` records with corpus isolation;
 - no-bluffing: supported facts require a valid citation **and** a deterministic check that the
   asserted category, subject, and value are derivable from the cited quote; unknown fields and
-  rejected assertions are explicit; `untrusted_instruction` blocks are excluded from extraction; and
+  rejected assertions are explicit; `untrusted_instruction` blocks are excluded from extraction;
+- a versioned ruleset `software-project-assurance.v1` plus a LangGraph Examine workflow:
+  load understanding → select rules → evaluate rules → validate evidence → summarize → finalize;
+- `ExaminationRun`, `Finding`, and `ExaminationStageEvent` records with corpus isolation; and
 - all verified Phase 01/02 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
 internet-facing production hardening remain excluded.
 
-**Examine, item-level human review, durable kill/resume, MCP business operations, watching/incremental
+**Item-level human review, durable kill/resume, MCP business operations, watching/incremental
 updates, register publication, and production deployment are not implemented.**
 
 ## Runtime and dependency baseline
@@ -146,8 +146,8 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.3.0`, current Phase 03 metadata, and a truthful statement that
-grounded Understand is implemented while Examine, human review, durable resume, MCP business
+Returns application version `0.4.0`, current Phase 04 metadata, and a truthful statement that
+grounded Understand and Examine are implemented while human review, durable resume, MCP business
 operations, and watching are not.
 
 ### Phase 02 corpus and source API
@@ -218,7 +218,39 @@ and `estimated_cost_usd=0`. Implemented skip reasons: `empty_corpus`, `no_releva
 $run = Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8000/corpora/$($corpus.id)/analysis-runs"
 Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/analysis-runs/$($run.id)/understanding"
+$exam = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/corpora/$($corpus.id)/analysis-runs/$($run.id)/examination-runs"
+Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/examination-runs/$($exam.id)/summary"
 ```
+
+### Phase 04 Examine API
+
+- `POST /corpora/{corpus_id}/analysis-runs/{analysis_run_id}/examination-runs`
+- `GET /corpora/{corpus_id}/examination-runs/{examination_run_id}`
+- `GET /corpora/{corpus_id}/examination-runs/{examination_run_id}/findings`
+- `GET /corpora/{corpus_id}/examination-runs/{examination_run_id}/summary`
+- `GET /corpora/{corpus_id}/examination-runs/{examination_run_id}/stage-events`
+
+Every operation is corpus-scoped. The analysis run must belong to the same corpus and must be
+`completed`. Cross-corpus examination lookups return not found. Subject-specific rules require
+both the rule's category and `subject_key`. Findings consume only Phase 03 supported facts and
+grounded contradictions from the same analysis run and corpus. Retrieval hits, rejected
+assertions, and raw source text cannot satisfy a rule. Missing required evidence is `unknown`,
+never `pass`, and UNKNOWN findings carry no fact, contradiction, or citation evidence.
+Prompt-injection source text cannot add or override a rule.
+
+API citations are derived from referenced grounded facts after Phase 02 exact provenance and
+Phase 03 assertion grounding are revalidated. They are not an independent evidence store.
+
+`spa.contradiction.open` fails only remaining contradictions not already consumed by a more
+specific rule. Zero remaining contradictions PASS only with a same-run completed
+`detect_contradictions` stage attestation (process evidence, not source provenance). Unrelated
+supported facts are never attached.
+
+Ruleset `software-project-assurance.v1` is configuration data plus named evaluators. It is not
+corpus-name special-casing. Outcomes are `pass`, `fail`, `warning`, and `unknown`. An examination
+of a no-findings Understand run returns `findings_status=no_findings` with an empty finding list
+after the applicable-rule count is evaluated as zero.
 
 ### Normalization and exact provenance
 
@@ -309,8 +341,11 @@ uv run python scripts/ensure_test_database.py
 uv run alembic upgrade head
 
 $env:DATABASE_URL = $testDatabaseUrl
+# If this database was already stamped at the previous uncommitted 0004 JSON-evidence schema,
+# Alembic will not reapply revision 20260819_0004. Drop leftover Phase 04 objects only, stamp
+# 20260819_0003, then continue. Do not run that recovery against non-test data.
 uv run alembic upgrade head
-uv run alembic downgrade 20260819_0001
+uv run alembic downgrade 20260819_0003
 uv run alembic upgrade head
 uv run alembic current
 
@@ -343,8 +378,8 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.3.0`,
-`Phase 03 — Understand`, grounded Understand, and the absence of Examine/review/resume/MCP watching.
+All three services should report healthy. `/version` should report application version `0.4.0`,
+`Phase 04 — Examine`, grounded Understand and Examine, and the absence of review/resume/MCP watching.
 The existing frontend remains a dependency/status shell.
 
 ## CI
@@ -406,12 +441,14 @@ No deployment workflow exists.
   Live-path cost is reported as unavailable unless a pricing snapshot is added later.
 - Contradiction detection is deterministic over supported facts that share category and subject key.
   Subtle semantic conflicts outside that contract are not claimed.
-- Examine, human review, durable resume, MCP business operations, watching, and register
-  publication remain unimplemented.
-- LangGraph PostgreSQL checkpoint/interrupt behavior is not used in Phase 03.
+- Examine evaluates a centrally versioned ruleset against grounded Phase 03 facts. It is not a
+  user-upload rule editor, generic expression engine, or register-publication step.
+- Human review, durable resume, MCP business operations, watching, and register publication remain
+  unimplemented.
+- LangGraph PostgreSQL checkpoint/interrupt behavior is not used.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–03 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–04 architecture and later-phase plans
