@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api import router as phase02_router
+from app.checkpointer import configure_windows_psycopg_loop
 from app.config import Settings, get_settings
 from app.db import (
     ReadinessProbe,
@@ -24,6 +25,9 @@ from app.review_service import ReviewService
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 from app.understand_service import UnderstandService
+from app.workflow_service import WorkflowService
+
+configure_windows_psycopg_loop()
 
 
 class HealthResponse(BaseModel):
@@ -44,6 +48,7 @@ def create_app(
     understand_service: UnderstandService | None = None,
     examine_service: ExamineService | None = None,
     review_service: ReviewService | None = None,
+    workflow_service: WorkflowService | None = None,
     model_adapter: ModelAdapter | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
@@ -86,6 +91,14 @@ def create_app(
             resolved_phase02,
             resolved_examine,
         )
+        application.state.workflow_service = workflow_service or WorkflowService(
+            resolved_phase02.session_factory,
+            resolved_phase02,
+            resolved_examine,
+            application.state.review_service,
+            adapter,
+            app_settings,
+        )
         yield
         await engine.dispose()
 
@@ -93,9 +106,9 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 05 human review over grounded Examine findings. "
-            "Durable resume, MCP business operations, watching, and register "
-            "publication are not implemented."
+            "Phase 06 durable checkpoint/resume over grounded Understand, Examine, "
+            "and the explicit human-review gate. MCP business operations, watching, "
+            "and register publication are not implemented."
         ),
         lifespan=lifespan,
     )

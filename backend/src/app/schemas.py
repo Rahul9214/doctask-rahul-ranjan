@@ -391,3 +391,39 @@ class ReviewDecisionResult(BaseModel):
     session: ReviewSessionResponse
     item: ReviewItemResponse
     decision: ReviewDecisionResponse
+
+
+class WorkflowRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    status: str
+    current_stage: str
+    checkpoint_thread_id: str
+    analysis_run_id: UUID | None
+    examination_run_id: UUID | None
+    review_session_id: UUID | None
+    attempt_count: int
+    resume_count: int
+    graph_version: str
+    error_code: str | None
+    error_detail: str | None
+    error_action: str | None
+    started_at: datetime | None
+    updated_at: datetime
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class WorkflowRunEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    workflow_run_id: UUID
+    event_type: str
+    stage_name: str | None
+    payload: dict[str, object]
+    duration_ms: int | None
+    created_at: datetime

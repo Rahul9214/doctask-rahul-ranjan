@@ -6,11 +6,14 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import text
 
+from app.checkpointer import configure_windows_psycopg_loop
 from app.config import Settings
 from app.db import create_engine, create_session_factory
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 from app.test_database import assert_destructive_test_database
+
+configure_windows_psycopg_loop()
 
 
 @pytest.fixture
@@ -35,7 +38,9 @@ async def phase02_service(
     async with engine.begin() as connection:
         await connection.execute(
             text(
-                "TRUNCATE review_decisions, review_items, review_sessions, "
+                "TRUNCATE checkpoint_writes, checkpoint_blobs, checkpoints, "
+                "workflow_run_events, durable_operations, workflow_runs, "
+                "review_decisions, review_items, review_sessions, "
                 "finding_fact_evidence, finding_contradiction_evidence, "
                 "examination_stage_events, findings, examination_runs, "
                 "contradictions, facts, stage_events, analysis_runs, "
@@ -50,7 +55,9 @@ async def phase02_service(
         async with engine.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE review_decisions, review_items, review_sessions, "
+                    "TRUNCATE checkpoint_writes, checkpoint_blobs, checkpoints, "
+                    "workflow_run_events, durable_operations, workflow_runs, "
+                    "review_decisions, review_items, review_sessions, "
                     "finding_fact_evidence, finding_contradiction_evidence, "
                     "examination_stage_events, findings, examination_runs, "
                     "contradictions, facts, stage_events, analysis_runs, "

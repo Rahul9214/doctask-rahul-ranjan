@@ -2,24 +2,32 @@
 
 ## Current state
 
-- **Current phase:** Phase 05 — Human Review — local initial PASS; independent verification
-  FAIL / NO-GO; correction implemented locally; independent re-verification of that correction
-  is not complete
-- **Implementation status:** grounded Understand is committed on `main`. Grounded Examine is
-  implemented locally (Phase 04 independent FAIL / NO-GO remains historical). Phase 05 human review
-  is implemented locally on `feat/phase-05-human-review`. Independent verification of the initial
-  Phase 05 implementation returned FAIL / NO-GO. The listed blockers are corrected locally;
-  independent re-verification is not complete.
+- **Current phase:** Phase 06 — Durable Resume — initial local PASS; independent verification
+  FAIL / NO-GO; first correction implemented locally; independent re-verification NO-GO; second
+  live-retry correction implemented locally; retry-allowlist re-verification NO-GO; exclusive
+  retry-allowlist correction implemented locally and not independently re-verified
+- **Implementation status:** grounded Understand is committed on `main`. Grounded Examine and
+  Phase 05 human review remain historically independently FAIL / NO-GO; those corrections were
+  implemented locally and are on the ancestry of this branch. Phase 06 durable resume had an
+  initial local PASS on `feat/phase-06-durable-resume`, then independent verification FAIL /
+  NO-GO. A first correction pass was implemented locally; independent re-verification of that
+  correction was NO-GO. A second live-retry correction was implemented locally; independent
+  re-verification was NO-GO because malformed HTTP 200 output was still auto-retried via a
+  generic `retryable=True` flag. An exclusive retry-allowlist correction is implemented locally.
+  Independent re-verification of that correction is not complete.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
   deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
   LangGraph Understand (classify/extract/ground/contradict/unknowns), inspectable analysis-run APIs,
   versioned `software-project-assurance.v1` Examine ruleset, LangGraph Examine
   (load/select/evaluate/validate/summarize/finalize), inspectable examination-run APIs,
-  explicit review sessions/items/decisions, a minimal React review panel, local Compose stack,
-  tests, and CI definition
+  explicit review sessions/items/decisions, a minimal React review panel, durable workflow runs with
+  PostgreSQL LangGraph checkpoints, a session-level same-run execution lock, an expensive-operation
+  ledger, real process-kill resume, same-corpus run isolation, local Compose stack, tests, and CI
+  definition
 - **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
-  httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter
+  httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter;
+  psycopg[binary] 3.3.4 is a main backend dependency for LangGraph PostgreSQL checkpointing
 - **Application or test commands available:** exact verified commands are recorded below and in
   `README.md`
 - **Git write operations performed by the agent:** none
@@ -38,6 +46,10 @@
   correction implemented locally; independent re-verification of that correction is not complete
 - **Phase 05 status:** local initial PASS; independent verification FAIL / NO-GO; correction
   implemented locally; independent re-verification not complete
+- **Phase 06 status:** initial local PASS; independent verification FAIL / NO-GO; first correction
+  implemented locally; independent re-verification NO-GO; second live-retry correction implemented
+  locally; retry-allowlist re-verification NO-GO; exclusive retry-allowlist correction implemented
+  locally; independent re-verification of that correction is not complete
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record â€” 2026-08-18
@@ -1734,3 +1746,292 @@ Correction verification:
 
 Independent re-verification of this correction is not complete. Do not begin Phase 06 without
 separate explicit authorization. Candidate owns Git writes.
+
+## Phase 06 record — 2026-08-20
+
+### Scope completed
+
+Implemented durable execution only. No publication, watcher, MCP, or incremental processing.
+
+- `WorkflowRun` / `DurableOperation` / `WorkflowRunEvent` with corpus FKs, status checks, unique
+  operation keys, and unique checkpoint thread ids
+- Alembic `20260819_0006` after committed `20260819_0005`, including LangGraph checkpoint tables
+- Outer LangGraph graph: Understand → Examine → open review → `interrupt()` human gate → finalize
+- `AsyncPostgresSaver` with `durability="sync"`; thread id equals workflow run id
+- Costly-call ledger: intent before provider call, result after, `ambiguous` crash window
+- Deterministic keyless proof of one logical operation vs provider attempts
+- Real subprocess kill after Understand barrier, new process resumes the same run
+- Same-corpus concurrent runs stay isolated; advisory locks serialize run claim and operation keys
+- Typed corpus-scoped start/inspect/resume/events API
+- Resume of `waiting_for_review` does not auto-approve or create decisions
+- Failed model calls persist safe cause/remedy; resume retries without duplicating completed stages
+- Application version `0.6.0`, phase `Phase 06 — Durable Resume`
+
+TASK.md Phase 06 one-liner mentioned publication. Publication is explicitly deferred: the durable
+contract stops at the human-review gate. Concurrent publication remains the Behavior 9 remainder.
+
+### Cursor implementation verification — exact commands and final results
+
+Inspection: `feat/phase-06-durable-resume`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`
+(Compose db only; backend/frontend were stopped during pytest for host memory):
+
+- `uv sync --frozen --all-groups` — PASS
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 53 source files
+- dedicated test-database Alembic `0005 → 0006 → 0005 → 0006`,
+  `current = 20260819_0006 (head)` — PASS
+- `uv run pytest -m integration` — PASS; 57 passed, 80 deselected in 99.43s
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 137 passed, **92.28%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.6.0`
+- dedicated real process-kill command:
+  `uv run pytest tests/test_process_kill_resume.py::test_real_process_kill_then_new_process_resumes_same_run`
+  — PASS in 13.13s
+
+Process-kill contract proven by that test:
+
+1. `scripts/durable_workflow_worker.py start --hold-after understand` in process A
+2. barrier file written after the Understand checkpoint
+3. PostgreSQL checkpoint row and completed ledger ops exist
+4. process A is forcibly killed (`Popen.kill()`)
+5. process B: `scripts/durable_workflow_worker.py resume` for the same run/thread
+6. Understand `stage_completed` remains count 1; logical operation count unchanged
+7. status `waiting_for_review`; zero `ReviewDecision` rows
+
+Frontend from `frontend/`:
+
+- `npm ci` — PASS
+- `npm run format:check` / `lint` / `typecheck` — PASS
+- `npm test` — PASS; 2 files, 7 tests
+- `npm run build` — PASS
+
+Docker from repository root:
+
+- `docker compose config --quiet` — PASS
+- `docker compose build backend` — PASS; image installed `project-assurance-register==0.6.0`
+  including `psycopg-binary==3.3.4`
+- `docker compose up --build --detach` — PASS; db/backend/frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.6.0 Phase 06 — PASS
+- frontend HTTP 200 and `/api/ready` HTTP 200 — PASS
+- `docker compose exec backend alembic current` — PASS; `20260819_0006 (head)`
+- Aurora ingest → `POST /workflow-runs` → `waiting_for_review`; thread id equals run id;
+  events include `stage_completed` and `waiting_for_review`; 24 checkpoint rows; classify/extract
+  ledger rows `completed` with logical_operation_count=1
+- Harbor corpus + Aurora run → HTTP 404 `workflow_run_not_found`
+- `docker compose restart backend` then GET run still `waiting_for_review`; POST resume still
+  `waiting_for_review`; review session `pending_count=4`, `approved_count=0`
+
+### Failures encountered
+
+- PowerShell 5 does not accept `&&` or `Join-String`.
+- Windows: psycopg async cannot use ProactorEventLoop, while SelectorEventLoop cannot
+  `create_subprocess_exec`. Fix: `WindowsSelectorEventLoopPolicy` for the app/checkpointer, and
+  threaded `subprocess.Popen`/`run` in the kill/resume test.
+- `pg_advisory_lock` cannot share the ORM session connection; a dedicated engine connection holds
+  the lock.
+- LangGraph `Command(goto=failed_node)` does not re-run a node that left ERROR pending writes
+  because resume marks those channel versions already-seen. Failed resume now deletes that
+  thread's checkpoints and restarts the same thread; completed stages skip from durable rows.
+- Understand inner graph swallows `ModelError` into a failed analysis run; the outer graph then
+  marks the workflow failed and raises so Examine does not run on a failed understanding.
+- Host memory pressure: backend/frontend Compose services were stopped during pytest.
+
+### Security verification
+
+- No key, credential, personal information, resume, employer/NDA data, or private source was
+  added.
+- Cross-corpus workflow-run lookups return not found without traceback.
+- API error payloads use code/detail/action only.
+- Review resume does not create decisions or approve items.
+- Destructive integration cleanup still requires the exact disposable database
+  `project_assurance_test`, a different application database name, and
+  `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`.
+
+### Phase 06 limitations
+
+- Workflow `completed` means the durable graph finished after explicit Phase 05 review completion.
+  It is not a published register version.
+- No Redis/Celery/Kafka/worker fleet. The API process runs the graph; the subprocess worker is
+  for kill/resume proof.
+- Inner Understand/Examine graphs are not separately checkpointed.
+- Live providers are not guaranteed exactly-once; crash-after-response is `ambiguous`.
+- Deterministic mode may reconcile `ambiguous`; live mode requires an explicit retry policy.
+- Same-corpus concurrent runs are isolated; concurrent publication is not implemented.
+- MCP, watching, incremental processing, and production hardening are not implemented.
+- Frontend is a status/review shell, not a run-operations console.
+
+### Independent verification — FAIL / NO-GO
+
+Independent verification of the initial Phase 06 implementation returned FAIL / NO-GO. Blockers
+recorded:
+
+- same-run graph execution was not serialized across LangGraph invoke (advisory/row locks ended
+  before graph execution)
+- live uncertain timeout was silently retryable (`httpx.TimeoutException` treated as retryable)
+- attempt intent was not durable before the provider call (`provider_attempt_count=0` then invoke)
+- operation identity omitted taxonomy / Understand graph / prompt-config versions
+- resume of a pending/running run with no checkpoint could pass unsafe `None` state
+- durable operation CHECK constraints were too weak for lifecycle/count integrity
+
+Do not mark independent PASS. Do not begin Phase 07 without separate explicit authorization.
+Candidate owns Git writes.
+
+## Phase 06 correction record — 2026-08-20
+
+### Scope
+
+Correction pass only. No Phase 06 redesign. No Phase 07 work. No Git writes by the agent.
+
+- Session-level PostgreSQL advisory lock on `workflow-run:{run_id}` spans claim through graph
+  invoke and final state update
+- No-checkpoint resume re-enters the same run/thread from canonical initial state
+- Live `ReadTimeout` / `WriteTimeout` / unknown timeout → `operation_ambiguous`, not retried
+- `ConnectTimeout` / `PoolTimeout` remain retryable as pre-execution failures
+- Ledger increments and commits `provider_attempt_count` before each ledger-invoked provider call
+- Canonical operation identity includes taxonomy, Understand graph, prompt/config, outer workflow
+  graph, provider, model, source-input version, and request hash
+- Migration `20260819_0006` CHECK constraints tightened in place (0005 untouched)
+- Failed checkpoint reset remains same-run/thread restart and is serialized under the session lock
+- `resume_count` counts actual executions after the lock
+- `Command(resume=...)` is sent only after the Phase 05 session is completed, so two serialized
+  waiting resumes cannot consume both interrupt sites and finalize without a human decision
+
+### Cursor correction verification — exact commands and final results
+
+Inspection: `feat/phase-06-durable-resume`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`
+(Compose db only during pytest; backend/frontend stopped for host memory):
+
+- `uv run ruff format --check .` — PASS; 67 files already formatted
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 55 source files
+- dedicated test-database Alembic `0006 → 0005 → 0006`,
+  `current = 20260819_0006 (head)` — PASS
+- focused Phase 06 tests (ledger, workflow unit/integration/API, concurrency, timeouts,
+  process-kill) — PASS after dropping an extra full-corpus checkpoint-deletion test that
+  MemoryError'd; no-checkpoint resume now deletes checkpoint rows on the same run and resumes
+- `uv run pytest -m integration` — PASS; 66 passed, 83 deselected in 141.64s
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 149 passed, **92.60%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.6.0`
+- dedicated real process-kill command after the review-gate resume fix:
+  `uv run pytest tests/test_process_kill_resume.py::test_real_process_kill_then_new_process_resumes_same_run`
+  — PASS in 11.72s
+
+Frontend from `frontend/` (no Phase 06 UI expansion; API `implementation_status` text only):
+
+- `npm test` — PASS; 2 files, 7 tests
+
+Docker from repository root (sequential):
+
+- `docker compose config --quiet` — PASS
+- `docker compose build backend` — PASS; image installed `project-assurance-register==0.6.0`
+- `docker compose up --build --detach` — PASS; db/backend/frontend healthy
+- `/health` alive, `/ready` ready, `/version` 0.6.0 Phase 06 — PASS
+- frontend HTTP 200 and `/api/ready` HTTP 200 — PASS
+- `docker compose exec backend alembic current` — PASS; `20260819_0006 (head)`
+- Aurora ingest → `POST /workflow-runs` → `waiting_for_review`; thread id equals run id;
+  24 checkpoint rows; classify/extract ledger rows `completed` with logical_operation_count=1
+- two concurrent `POST .../resume` of that same run → both `waiting_for_review`;
+  understand `stage_completed` remains 1; `resume_count=2`; no `workflow_completed`
+- Harbor corpus + Aurora run → HTTP 404
+- `docker compose restart backend` then GET run still `waiting_for_review`; POST resume still
+  `waiting_for_review`; review session `pending_count=4`, `approved_count=0`
+- backend/frontend stopped afterward; db left running
+
+### Correction limitations
+
+- Independent re-verification of this correction is not complete. Do not mark independent PASS.
+- Live HTTP 429 and 503 remain adapter-retryable as explicit provider backpressure responses.
+  HTTP 408, HTTP 504, uncertain timeouts, and unclassified HTTPX transport errors are not.
+- Ledger commits attempt intent once per `execute()` invocation before `fn()`. Inner adapter
+  retries of known pre-execution failures are reflected on success via `usage.attempt_count`.
+- Failed-stage recovery is still a same-run/thread restart, not in-place LangGraph node
+  continuation.
+- No Phase 07 work.
+
+Do not begin Phase 07 without separate explicit authorization. Candidate owns Git writes.
+
+## Phase 06 final live-retry correction — 2026-08-20
+
+Independent re-verification of the first correction was NO-GO: HTTP 408, HTTP 504, and unclassified
+`httpx.HTTPError` / post-send transport failures were still automatically retried.
+
+### Policy now implemented
+
+Automatically retryable:
+
+- `ConnectTimeout`, `PoolTimeout`, `ConnectError` (request not sent)
+- HTTP 429 and HTTP 503 as explicit provider backpressure responses, not unknown transport cuts
+
+Ambiguous / no automatic retry:
+
+- `ReadTimeout`, `WriteTimeout`, unknown `TimeoutException`
+- HTTP 408, HTTP 504
+- `RemoteProtocolError` and other unclassified `httpx.HTTPError`
+
+Uncertain classification fails closed to `operation_ambiguous`. Provider exactly-once is not claimed.
+
+### Cursor verification — exact commands and final results
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`
+(Compose db only):
+
+- `uv run pytest tests/test_model_boundary.py tests/test_operation_ledger.py` — PASS
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 55 source files
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 155 passed, **92.50%** (gate 90%)
+- `git diff --check` — PASS
+
+Process-kill and Docker proofs were not rerun; this change does not touch workflow/checkpoint code.
+
+Independent re-verification of this final correction is not complete. Do not mark independent
+PASS. Do not begin Phase 07 without separate explicit authorization. Candidate owns Git writes.
+
+## Phase 06 exclusive retry-allowlist correction — 2026-08-20
+
+Independent re-verification of the second live-retry correction was NO-GO: malformed HTTP 200
+output was still `retryable=True`, so the live loop could issue multiple expensive requests.
+
+### Policy now implemented
+
+The live request loop retries only `LiveRetryDisposition.SAFE_RETRY`, which is set exclusively for:
+
+- `ConnectTimeout`
+- `PoolTimeout`
+- `ConnectError`
+- HTTP 429
+- HTTP 503
+
+Malformed/unusable HTTP 200 output is `TERMINAL` (`model_output_invalid`) with one provider
+attempt. Generic `ModelError.retryable` no longer controls the live loop.
+
+### Cursor verification — exact commands and final results
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`
+(Compose db only):
+
+- `uv run pytest tests/test_model_boundary.py tests/test_operation_ledger.py` — PASS; 34 passed
+- `uv run ruff format --check .` — PASS; 67 files already formatted
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 55 source files
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 158 passed,
+  **92.61%** (gate 90%). An earlier invocation of the same command had 5 host
+  `MemoryError` failures during DOCX/zip ingest in existing workflow tests;
+  those five tests passed in isolation, and this later full invocation passed
+  all 158.
+- `git diff --check` — PASS
+
+Process-kill and Docker proofs were not rerun; this change does not touch workflow/checkpoint
+logic.
+
+Independent re-verification of this exclusive retry-allowlist correction is not complete. Do
+not mark independent PASS. Do not begin Phase 07 without separate explicit authorization.
+Candidate owns Git writes.

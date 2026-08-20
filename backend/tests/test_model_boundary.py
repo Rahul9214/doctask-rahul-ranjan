@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from uuid import uuid4
 
 import httpx
@@ -5,7 +6,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.config import Settings, get_settings
-from app.errors import ModelError, ValidationError
+from app.errors import LiveRetryDisposition, ModelError, ValidationError
 from app.model_gateway import (
     BlockClassification,
     BlockContext,
@@ -18,6 +19,21 @@ from app.model_gateway import (
 )
 from app.schemas import CitationRequest
 from app.understand_graph import detect_supported_contradictions
+
+
+def _live_adapter(
+    handler: Callable[[httpx.Request], httpx.Response],
+    *,
+    max_retries: int,
+) -> OpenAICompatibleAdapter:
+    return OpenAICompatibleAdapter(
+        api_key="sk-test-secret-should-not-leak",
+        model="gpt-4o-mini",
+        base_url="https://example.test/v1",
+        timeout_seconds=0.1,
+        max_retries=max_retries,
+        transport=httpx.MockTransport(handler),
+    )
 
 
 def _block(text: str) -> BlockContext:
@@ -187,10 +203,153 @@ async def test_openai_adapter_translates_timeout_without_leaking_key() -> None:
     )
     with pytest.raises(ModelError) as error:
         await adapter.classify_blocks([_block("Project sponsor: A")])
-    assert error.value.code == "model_timeout"
-    assert error.value.retryable is True
+    assert error.value.code == "operation_ambiguous"
+    assert error.value.retryable is False
     assert "sk-test-secret-should-not-leak" not in str(error.value)
     assert "sk-test-secret-should-not-leak" not in error.value.detail
+
+
+@pytest.mark.asyncio
+async def test_openai_adapter_retries_connect_timeout_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        raise httpx.ConnectTimeout("connect")
+
+    adapter = _live_adapter(handler, max_retries=1)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "model_timeout"
+    assert error.value.retryable is True
+    assert error.value.retry_disposition is LiveRetryDisposition.SAFE_RETRY
+    assert attempts["count"] == 2
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("factory", "code"),
+    [
+        (httpx.PoolTimeout, "model_timeout"),
+        (httpx.ConnectError, "model_unavailable"),
+    ],
+)
+async def test_openai_adapter_retries_pool_timeout_and_connect_error(
+    monkeypatch: pytest.MonkeyPatch,
+    factory: type[httpx.HTTPError],
+    code: str,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        raise factory("pre-send")
+
+    adapter = _live_adapter(handler, max_retries=1)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == code
+    assert error.value.retryable is True
+    assert error.value.retry_disposition is LiveRetryDisposition.SAFE_RETRY
+    assert attempts["count"] == 2
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "timeout_factory",
+    [httpx.ReadTimeout, httpx.WriteTimeout, httpx.TimeoutException],
+)
+async def test_openai_adapter_does_not_retry_uncertain_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+    timeout_factory: type[httpx.TimeoutException],
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        raise timeout_factory("slow")
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "operation_ambiguous"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.AMBIGUOUS
+    assert attempts["count"] == 1
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+    assert "sk-test-secret-should-not-leak" not in (error.value.action or "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [408, 504])
+async def test_openai_adapter_does_not_retry_ambiguous_http_timeout_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        return httpx.Response(
+            status_code,
+            json={"error": "gateway-timeout", "secret": "sk-test-secret-should-not-leak"},
+        )
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "operation_ambiguous"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.AMBIGUOUS
+    assert attempts["count"] == 1
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+    assert "sk-test-secret-should-not-leak" not in (error.value.action or "")
+    assert "gateway-timeout" not in error.value.detail
+
+
+@pytest.mark.asyncio
+async def test_openai_adapter_does_not_retry_uncertain_protocol_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        raise httpx.RemoteProtocolError("server disconnected")
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "operation_ambiguous"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.AMBIGUOUS
+    assert attempts["count"] == 1
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+    assert "server disconnected" not in error.value.detail
 
 
 @pytest.mark.asyncio
@@ -295,16 +454,24 @@ async def test_openai_adapter_rejects_unauthorized_without_leaking_key() -> None
 
 
 @pytest.mark.asyncio
-async def test_openai_adapter_retries_transient_failure_then_succeeds() -> None:
+@pytest.mark.parametrize("status_code", [429, 503])
+async def test_openai_adapter_retries_explicit_provider_backpressure_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+) -> None:
     import json
 
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
     block = _block("Overall status is GREEN")
     attempts = {"count": 0}
 
     def handler(_request: httpx.Request) -> httpx.Response:
         attempts["count"] += 1
         if attempts["count"] == 1:
-            return httpx.Response(503, json={"error": "busy"})
+            return httpx.Response(status_code, json={"error": "busy"})
         payload = {
             "choices": [
                 {
@@ -410,6 +577,7 @@ async def test_openai_adapter_exhausted_retries_reports_actual_attempt_count(
     with pytest.raises(ModelError) as error:
         await adapter.classify_blocks([_block("Overall status is GREEN")])
     assert error.value.code == "model_unavailable"
+    assert error.value.retry_disposition is LiveRetryDisposition.SAFE_RETRY
     assert error.value.attempt_count == 3
     assert attempts["count"] == 3
     assert "sk-test-secret-should-not-leak" not in error.value.detail
@@ -417,21 +585,85 @@ async def test_openai_adapter_exhausted_retries_reports_actual_attempt_count(
 
 
 @pytest.mark.asyncio
-async def test_openai_adapter_rejects_invalid_json_payload() -> None:
+async def test_openai_adapter_rejects_invalid_json_payload_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
     def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
         return httpx.Response(200, json={"choices": [{"message": {"content": "not-json"}}]})
 
-    adapter = OpenAICompatibleAdapter(
-        api_key="sk-live",
-        model="gpt-4o-mini",
-        base_url="https://example.test/v1",
-        timeout_seconds=1,
-        max_retries=0,
-        transport=httpx.MockTransport(handler),
-    )
+    adapter = _live_adapter(handler, max_retries=2)
     with pytest.raises(ModelError) as error:
         await adapter.extract_facts([_block("Project sponsor: A")])
     assert error.value.code == "model_output_invalid"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.TERMINAL
+    assert attempts["count"] == 1
+    assert error.value.attempt_count == 1
+
+
+@pytest.mark.asyncio
+async def test_openai_adapter_rejects_schema_invalid_json_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps({"unexpected": True})}}]},
+        )
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "model_output_invalid"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.TERMINAL
+    assert attempts["count"] == 1
+    assert error.value.attempt_count == 1
+
+
+@pytest.mark.asyncio
+async def test_openai_adapter_rejects_malformed_structured_output_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps({"classifications": "nope"})}}]},
+        )
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "model_output_invalid"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.TERMINAL
+    assert attempts["count"] == 1
+    assert error.value.attempt_count == 1
 
 
 def test_untrusted_evidence_is_wrapped_as_data() -> None:

@@ -120,7 +120,7 @@ describe("App", () => {
 
     expect(
       screen.getByText(
-        "Understand, Examine, and item-level human review are implemented. Register publication, durable resume, MCP, and watching are not.",
+        "Understand, Examine, item-level human review, and durable resume are implemented. Register publication, MCP, and watching are not.",
       ),
     ).toBeInTheDocument();
   });

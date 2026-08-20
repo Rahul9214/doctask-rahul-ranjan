@@ -17,14 +17,17 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.5.0"
-    current_phase: str = "Phase 05 — Human Review"
+    app_version: str = "0.6.0"
+    current_phase: str = "Phase 06 — Durable Resume"
     implementation_status: str = (
-        "Grounded Understand, Examine, and item-level human review are implemented: "
-        "classification, fact extraction, exact provenance validation, contradiction "
-        "detection, versioned assurance rules, no-bluffing findings, and explicit "
-        "approve/reject/edit decisions; durable resume, MCP business operations, "
-        "watching, and register publication are not implemented."
+        "Durable checkpoint/resume over grounded Understand, Examine, and the explicit "
+        "human-review gate is implemented: PostgreSQL LangGraph checkpoints, a session-level "
+        "advisory lock spanning graph execution, an operation ledger for costly calls, "
+        "process-kill recovery, and same-corpus run isolation. Automatic live retries are "
+        "exclusive to ConnectTimeout, PoolTimeout, ConnectError, HTTP 429, and HTTP 503. "
+        "Malformed HTTP 200 output and uncertain timeouts or post-send transport failures "
+        "are not retried automatically. MCP business operations, watching, incremental "
+        "updates, and register publication are not implemented."
     )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"

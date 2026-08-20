@@ -832,3 +832,190 @@ class ReviewDecision(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        UniqueConstraint("id", "corpus_id", name="uq_workflow_runs_id_corpus"),
+        UniqueConstraint("checkpoint_thread_id", name="uq_workflow_runs_checkpoint_thread_id"),
+        ForeignKeyConstraint(
+            ["analysis_run_id", "corpus_id"],
+            ["analysis_runs.id", "analysis_runs.corpus_id"],
+            name="fk_workflow_runs_analysis_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id"],
+            ["examination_runs.id", "examination_runs.corpus_id"],
+            name="fk_workflow_runs_examination_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_session_id", "corpus_id"],
+            ["review_sessions.id", "review_sessions.corpus_id"],
+            name="fk_workflow_runs_review_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'waiting_for_review', 'failed', 'completed')",
+            name="ck_workflow_runs_status",
+        ),
+        CheckConstraint(
+            "current_stage IN ("
+            "'pending', 'understand', 'examine', 'open_review', "
+            "'wait_for_review', 'finalize', 'completed'"
+            ")",
+            name="ck_workflow_runs_current_stage",
+        ),
+        CheckConstraint(
+            "(status = 'completed' AND completed_at IS NOT NULL) OR "
+            "(status <> 'completed' AND completed_at IS NULL)",
+            name="ck_workflow_runs_completion_timestamp",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_workflow_runs_attempt_count"),
+        CheckConstraint("resume_count >= 0", name="ck_workflow_runs_resume_count"),
+        CheckConstraint(
+            "char_length(btrim(checkpoint_thread_id)) > 0",
+            name="ck_workflow_runs_checkpoint_thread_id",
+        ),
+        Index("ix_workflow_runs_corpus_id", "corpus_id"),
+        Index("ix_workflow_runs_status", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    current_stage: Mapped[str] = mapped_column(String(40), default="pending")
+    checkpoint_thread_id: Mapped[str] = mapped_column(String(64))
+    analysis_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    examination_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    review_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    resume_count: Mapped[int] = mapped_column(Integer, default=0)
+    graph_version: Mapped[str] = mapped_column(String(100))
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DurableOperation(Base):
+    __tablename__ = "durable_operations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workflow_run_id", "corpus_id"],
+            ["workflow_runs.id", "workflow_runs.corpus_id"],
+            name="fk_durable_operations_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("operation_key", name="uq_durable_operations_operation_key"),
+        UniqueConstraint("id", "corpus_id", name="uq_durable_operations_id_corpus"),
+        CheckConstraint(
+            "status IN ('intended', 'in_flight', 'completed', 'failed', 'ambiguous')",
+            name="ck_durable_operations_status",
+        ),
+        CheckConstraint(
+            "logical_operation_count IN (0, 1)",
+            name="ck_durable_operations_logical_count",
+        ),
+        CheckConstraint(
+            "provider_attempt_count >= 0",
+            name="ck_durable_operations_attempt_count",
+        ),
+        CheckConstraint(
+            "status <> 'intended' OR (logical_operation_count = 0 AND provider_attempt_count = 0)",
+            name="ck_durable_operations_intended",
+        ),
+        CheckConstraint(
+            "status <> 'in_flight' OR "
+            "(logical_operation_count = 0 AND provider_attempt_count >= 1)",
+            name="ck_durable_operations_in_flight",
+        ),
+        CheckConstraint(
+            "status <> 'completed' OR ("
+            "result_hash IS NOT NULL AND char_length(btrim(result_hash)) = 64 "
+            "AND logical_operation_count = 1 AND provider_attempt_count >= 1"
+            ")",
+            name="ck_durable_operations_completed",
+        ),
+        CheckConstraint(
+            "status <> 'failed' OR logical_operation_count = 0",
+            name="ck_durable_operations_failed",
+        ),
+        CheckConstraint(
+            "status <> 'ambiguous' OR "
+            "(logical_operation_count = 0 AND provider_attempt_count >= 1)",
+            name="ck_durable_operations_ambiguous",
+        ),
+        CheckConstraint(
+            "char_length(btrim(operation_key)) = 64",
+            name="ck_durable_operations_operation_key",
+        ),
+        Index("ix_durable_operations_corpus_id", "corpus_id"),
+        Index("ix_durable_operations_workflow_run_id", "workflow_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    workflow_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    operation_key: Mapped[str] = mapped_column(String(64))
+    operation_type: Mapped[str] = mapped_column(String(50))
+    stage: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="intended")
+    request_hash: Mapped[str] = mapped_column(String(64))
+    result_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    logical_operation_count: Mapped[int] = mapped_column(Integer, default=0)
+    provider_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    provider_idempotency_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_input_version: Mapped[str] = mapped_column(String(64))
+    model_provider: Mapped[str] = mapped_column(String(40))
+    model_name: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WorkflowRunEvent(Base):
+    __tablename__ = "workflow_run_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workflow_run_id", "corpus_id"],
+            ["workflow_runs.id", "workflow_runs.corpus_id"],
+            name="fk_workflow_run_events_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "corpus_id", name="uq_workflow_run_events_id_corpus"),
+        CheckConstraint(
+            "duration_ms IS NULL OR duration_ms >= 0", name="ck_workflow_run_events_ms"
+        ),
+        Index("ix_workflow_run_events_corpus_id", "corpus_id"),
+        Index("ix_workflow_run_events_workflow_run_id", "workflow_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    workflow_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80))
+    stage_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
