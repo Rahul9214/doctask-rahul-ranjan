@@ -3,16 +3,23 @@
 ## Status
 
 **Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, Phase 04
-Examine, and Phase 05 item-level human review are implemented.** Independent Phase 03 FAIL
-(grounding) and follow-up NO-GO remain historical record. Phase 03 current status is independent
-final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 local
-initial implementation PASS; independent verification FAIL / NO-GO remains historical. Examine
-consumes grounded Phase 03 records and revalidates Phase 02 provenance before persisting definitive
-findings. Human review creates an explicit `WAITING_FOR_REVIEW` session from a completed examination
-and records item-level approve/reject/edit decisions without publishing a register.
+Examine, Phase 05 item-level human review, and Phase 06 durable resume are implemented.** Independent
+Phase 03 FAIL (grounding) and follow-up NO-GO remain historical record. Phase 03 current status is
+independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS.
+Phase 04 and Phase 05 independent FAIL / NO-GO remain historical. Phase 06 initial local
+implementation PASS; independent verification FAIL / NO-GO; a first correction pass was implemented
+locally; independent re-verification of that correction was NO-GO; a second live-retry correction is
+implemented locally; retry-allowlist re-verification was NO-GO; an exclusive retry-allowlist
+correction is implemented locally and is not independently re-verified. Examine consumes grounded
+Phase 03 records and revalidates
+Phase 02 provenance before persisting definitive findings. Human review creates an explicit
+`WAITING_FOR_REVIEW` session from a completed examination and records item-level approve/reject/edit
+decisions without publishing a register. Durable workflow runs coordinate those stages with
+PostgreSQL LangGraph checkpoints, a session-level same-run execution lock, an operation ledger, and
+process-kill resume.
 
-Register publication, MCP business tools, durable workflow resume, incremental updates, and the
-watcher remain planned. Implementation evidence may simplify or revise those plans; revisions are
+MCP business tools, incremental updates, the watcher, register publication, and production
+deployment remain planned. Implementation evidence may simplify or revise those plans; revisions are
 recorded in `PROGRESS.md`.
 
 ## Design goals
@@ -33,7 +40,7 @@ It does not exist to demonstrate infrastructure breadth.
 
 The explicit non-cuttable floor is limited to behaviors 1–5: visible path-changing stages, durable resume, item-level human review, machine-driven flow, and no-bluffing. Understand, examine, and stay alive must each remain genuinely represented, but detailed sub-features inside the movements may be cut with explicit rationale.
 
-One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** They remain planned and prioritized architecture targets, not absolute minimum acceptance gates.
+One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Concurrent publication, MCP, and one-command stranger-setup polish remain later.
 
 ## Stack classification
 
@@ -48,7 +55,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01–04 runtime
+## Implemented Phase 01–06 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -60,20 +67,29 @@ flowchart LR
     API --> P3[UnderstandService]
     API --> P4[ExamineService]
     API --> P5[ReviewService]
+    API --> P6[WorkflowService]
+    P6 --> DurableGraph[LangGraphDurableWorkflow]
+    DurableGraph --> P3
+    DurableGraph --> P4
+    DurableGraph --> P5
     P3 --> Graph[LangGraphUnderstand]
     P4 --> ExamineGraph[LangGraphExamine]
-    Graph --> Model[ModelAdapter]
+    Graph --> Ledger[OperationLedger]
+    Ledger --> Model[ModelAdapter]
     P2 --> DB[(PostgreSQL17_pgvector)]
     P3 --> DB
     P4 --> DB
     P5 --> DB
+    P6 --> DB
+    DurableGraph --> Checkpoints[LangGraphPostgresCheckpoints]
+    Checkpoints --> DB
     P2 --> Store[MountedSourceStore]
     Alembic[AlembicStartupMigration] --> DB
 ```
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
 - FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
-  analysis-run, Examine examination-run, and human-review routes.
+  analysis-run, Examine examination-run, human-review, and durable workflow-run routes.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
@@ -81,12 +97,15 @@ flowchart LR
 - Alembic revision `20260819_0001` enables `vector`; `20260819_0002` creates corpus/source tables;
   `20260819_0003` creates `analysis_runs`, `facts`, `contradictions`, and `stage_events`;
   `20260819_0004` creates `examination_runs`, `findings`, and `examination_stage_events`;
-  `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`.
+  `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`;
+  `20260819_0006` creates `workflow_runs`, `durable_operations`, `workflow_run_events`, and
+  LangGraph checkpoint tables.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
-- LangGraph executes Understand and Examine stages with real conditional skips. The PostgreSQL
-  checkpointer and MCP remain locked but unused. Human interrupt/resume is not implemented.
+- LangGraph executes Understand and Examine stages with real conditional skips. The outer durable
+  graph uses `AsyncPostgresSaver` with `durability="sync"`. Human review uses `interrupt()` and
+  remains `waiting_for_review` until Phase 05 completion. MCP remains locked but unused.
 
 ## Implemented Phase 02 data layer
 
@@ -200,18 +219,18 @@ Implemented now:
 - create and inspect Examine runs, findings, summaries, and stage events;
 - create and inspect review sessions, enumerate review items with grounded evidence, record
   explicit item-level approve/reject/edit decisions under row-level transactional locking, and
-  complete a session only after required items have terminal decisions.
+  complete a session only after required items have terminal decisions;
+- start, inspect, and resume corpus-scoped durable workflow runs, including event listing.
 
 Later planned responsibilities:
 
-- resume workflows after accepted human decisions;
 - publish approved-only register versions;
-- serve immutable source snippets/locators safely; and
-- return truthful failure states with cause and remedy.
+- serve immutable source snippets/locators safely.
 
 ### LangGraph Understand workflow
 
-Implemented in-process for Phase 03 (not a separate worker, and not PostgreSQL-checkpointed):
+Implemented in-process for Phase 03 (the inner Understand graph is not itself PostgreSQL-checkpointed;
+Phase 06 checkpoints the outer durable workflow around it):
 
 ```mermaid
 flowchart TD
@@ -246,11 +265,12 @@ Skipped conceptual stages still persist `StageEvent` rows (`empty_corpus`, `no_r
   `model_operation_count=0`, and `estimated_cost_usd=0`. `model_operation_count` is logical;
   `model_attempt_count` is provider HTTP attempts.
 
-Durable kill/resume and human interrupt remain planned.
+Phase 06 durable kill/resume and human-review interrupt are implemented on the outer workflow graph.
 
 ### LangGraph Examine workflow
 
-Implemented in-process for Phase 04 (not a separate worker, and not PostgreSQL-checkpointed):
+Implemented in-process for Phase 04 (the inner Examine graph is not itself PostgreSQL-checkpointed;
+Phase 06 checkpoints the outer durable workflow around it):
 
 ```mermaid
 flowchart TD
@@ -296,10 +316,11 @@ evidence, deterministic vectors, HNSW indexing, and metadata-filtered retrieval.
 
 Later planned responsibilities:
 
-- LangGraph checkpoints and durable job claiming;
-- idempotency keys and operation results;
 - published register versions and item hashes; and
 - append-only change-attribution events.
+
+Implemented in Phase 06: LangGraph checkpoint tables, durable workflow runs, operation ledger
+keys/results, and run events.
 
 pgvector assists retrieval recall. It is not evidence and cannot satisfy provenance.
 
@@ -379,6 +400,25 @@ Implemented in Phase 05:
   proposal snapshot, edited content when applicable, explicit reviewer-authored acknowledgement,
   actor/source, comment, and timestamp. Decision writes lock the session then the item.
 
+Implemented in Phase 06:
+
+- `WorkflowRun`: corpus-scoped durable orchestration over Understand, Examine, and the human-review
+  gate. Status is `pending`, `running`, `waiting_for_review`, `failed`, or `completed`. Current
+  stage, attempt/resume counts, checkpoint thread id (equal to run id), linked analysis/
+  examination/review ids, configuration/version identifiers, and failure cause/remedy are stored.
+  Failed is not waiting.
+- `DurableOperation`: idempotency ledger row keyed by SHA-256 of the canonical identity payload:
+  workflow run id, stage, operation type, source-input version, canonical request hash, model
+  provider, model name, taxonomy version, Understand graph/version, prompt/config version, and outer
+  workflow graph version. Timestamps are excluded. Status is `intended`, `in_flight`, `completed`,
+  `failed`, or `ambiguous`. Records logical operation count, provider attempts, result hash/payload,
+  and provider idempotency identifier. CHECK constraints reject invalid lifecycle combinations.
+- `WorkflowRunEvent`: append-only stage/resume/failure/checkpoint evidence for one run.
+
+LangGraph checkpoint tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`,
+`checkpoint_migrations`) are created by migration `20260819_0006` and owned by
+`AsyncPostgresSaver`.
+
 Rules live in versioned application configuration (`software-project-assurance.v1`), not a
 user-upload table. A user-supplied rule editor is not implemented.
 
@@ -387,7 +427,6 @@ Planned for later phases:
 - `RegisterItem`: stable assurance item with canonical serialized content.
 - `ChangeSet` and `ChangeItem`: immutable proposals and their before/after hashes.
 - `RegisterVersion`: published version and ordered item hashes.
-- `IdempotencyRecord`: operation key, durable status, and prior result.
 
 Every query and uniqueness rule must include the appropriate corpus, source, run, or register-version identity. Do not rely on process-local global state.
 
@@ -434,6 +473,19 @@ completed examination
 → append-only decision history; latest valid state is current
 → recompute session counts from item rows in the same transaction
 → complete only when every required item has a terminal decision
+```
+
+The implemented Phase 06 resume path is:
+
+```text
+POST /workflow-runs
+→ durable Understand / Examine / open_review
+→ status = waiting_for_review; LangGraph interrupt()
+→ process restart or POST .../resume
+→ still waiting_for_review; no decisions created
+→ explicit Phase 05 complete
+→ resume continues to finalize
+→ workflow status = completed (no publication)
 ```
 
 Register publication remains later:
@@ -585,36 +637,73 @@ Incremental evidence compares all of those fields before and after the update. H
 
 ## Durability, idempotency, and concurrency
 
-Durable resume is non-cuttable behavior 2. Concurrent-run isolation is planned behavior 9: **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
+Durable resume is non-cuttable behavior 2 and is implemented in Phase 06. Concurrent-run isolation
+for independent workflow runs against the same corpus is implemented. Concurrent publication of a
+register version remains planned behavior 9 remainder: **Strong differentiator — may be cut only
+with explicit rationale if time forces a trade-off.** Publication is not implemented in Phase 06
+because the durable contract stops at the explicit human-review gate.
 
-Start simple and PostgreSQL-backed:
+Implemented PostgreSQL-backed mechanism:
 
-- Use LangGraph’s PostgreSQL checkpointer if package/runtime verification shows it satisfies process-kill recovery.
-- Store a durable job/run row with status, attempt, lease/heartbeat timestamps, and checkpoint/thread identity.
-- Claim available work using a short PostgreSQL transaction, such as row locking with `FOR UPDATE SKIP LOCKED`, then perform long work outside the claim transaction.
-- Use unique idempotency keys for upload content, run triggers, model-stage operations, watcher arrivals, review submissions, and publication.
-- Before a costly external call, persist the operation key and attempt.
-- Use provider idempotency when available.
-- Persist the returned structured result before graph advancement and reuse that durable completed result on resume.
-- Retry only when non-completion is known.
-- If the provider outcome is unknowable, record an honest ambiguous state and reconcile/retry rather than claiming exactly-once behavior.
-- Use optimistic register-version checks and a short row lock or advisory lock during publication.
-- Enforce unique publication per accepted change-set version.
-- Keep checkpoints and stage results scoped by run identity.
-
-This is a proposed mechanism, not implemented SQL.
-
-A transactional outbox is deliberately not part of the initial commitment. Introduce it only if later implementation needs atomic database-to-external-message delivery that the simple job/checkpoint design cannot prove safely.
+- Outer LangGraph graph: `understand → after_understand → examine → after_examine → open_review →
+  wait_for_review → finalize`, compiled with `AsyncPostgresSaver` and `durability="sync"`.
+- `checkpoint_thread_id` is the workflow run UUID. Checkpoints are not in-memory for Phase 06
+  evidence.
+- Same-run graph execution is serialized by a dedicated PostgreSQL session-level advisory lock
+  (`pg_advisory_lock(hashtext('workflow-run:{run_id}'))`) on a connection kept open for the whole
+  critical window: claim → re-read run → inspect checkpoint → optional failed-thread reset → graph
+  invoke/resume → final workflow state read/update → unlock. `SELECT ... FOR UPDATE` is only the
+  short claim transaction inside that window. Process-local mutexes are not used.
+- `resume_count` increments once per actual start/resume execution after that lock is held. Two
+  concurrent callers do not both increment unless both actually execute after serializing.
+- Costly model calls persist attempt intent (`in_flight` with `provider_attempt_count` incremented)
+  and commit it before each ledger-invoked provider function. Completed keys reuse the stored
+  result (local completed persistence).
+- Logical idempotency: `logical_operation_count = 1` for a successful logical operation. Provider
+  attempts may exceed one only when a safe retry policy actually initiated those attempts.
+- Deterministic adapter retries inside the provider boundary count as one logical operation and
+  multiple provider attempts.
+- Provider ambiguity: if a prior call may have executed and the local result was not stored, the
+  row is `ambiguous`. Deterministic tests may reconcile; the live path requires an explicit retry
+  policy. Exactly-once provider execution is not claimed.
+- Live retry policy is exclusive. Automatic retries: `ConnectTimeout`, `PoolTimeout`,
+  `ConnectError`, HTTP 429, and HTTP 503 only. The live request loop retries solely on an
+  explicit `SAFE_RETRY` disposition. Malformed HTTP 200 / invalid structured output is
+  `TERMINAL` (`model_output_invalid`) and is not retried. Ambiguous/non-retry: `ReadTimeout`,
+  `WriteTimeout`, unknown `TimeoutException`, HTTP 408, HTTP 504, `RemoteProtocolError`, and
+  unclassified `httpx.HTTPError`. Uncertain classification becomes `operation_ambiguous`.
+- Same-corpus concurrent workflow runs use distinct run/thread ids. Operation keys include
+  `workflow_run_id`, so they cannot collide across runs. Concurrent duplicate requests for one key
+  are serialized with a session-level `pg_advisory_lock`.
+- `wait_for_review` calls `interrupt()`. Resume sends `Command(resume=...)` only when interrupts
+  exist **and** the Phase 05 review session is completed. A resume while required items are still
+  pending re-reads durable state and stays `waiting_for_review`; it does not auto-approve, create
+  decisions, or consume the follow-up interrupt. After explicit Phase 05 completion, resume
+  continues to `finalize` / `completed`. Publication is not performed.
+- A pending/running run with no checkpoint re-enters the same run/thread from canonical initial
+  state. It does not create a new run or thread.
+- A raised failed stage leaves LangGraph ERROR pending writes. Failed resume, under the same-run
+  session lock, deletes only that thread's checkpoints and restarts the same run/thread from
+  durable business/ledger state. This is not in-place node continuation. Completed stages skip from
+  durable rows and completed ledger results. Concurrent failed resumes serialize so only one reset
+  runs.
 
 Required behavior 2 evidence:
 
-- kill a real worker subprocess after a durable failpoint, restart, and reuse completed stage results;
+- kill a real worker subprocess after the Understand checkpoint barrier
+  (`scripts/durable_workflow_worker.py` + `tests/test_process_kill_resume.py`);
+- start a new process;
+- resume the same run/thread;
+- prove Understand was not repeated and logical operation count is unchanged;
+- reach `waiting_for_review` with zero review decisions created.
 
-Planned behavior 9 and additional idempotency evidence:
+Implemented same-corpus concurrency evidence (not publication):
 
-- process two distinct runs simultaneously with no cross-run state;
-- process two same-corpus runs simultaneously with safe version conflict behavior; and
-- repeat operations and prove no duplicated source, cost record, review application, or publication.
+- two independent workflow runs against one corpus remain isolated;
+- checkpoints and operation keys do not cross;
+- concurrent duplicate ledger requests produce one durable logical operation.
+
+A transactional outbox is deliberately not part of the initial commitment.
 
 ## Trust boundaries and prompt-injection defense
 
@@ -653,7 +742,10 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
   A valid-but-unrelated citation is not sufficient.
 - Unsupported claims remain explicit and cannot be rendered as sourced facts.
 - Contradictory evidence remains visible until a human decision; it is not silently reconciled.
-- `COMPLETED` requires a durable published version, applied-decision audit, and successful provenance/hash verification.
+- `COMPLETED` for a published register still requires a durable published version, applied-decision
+  audit, and successful provenance/hash verification. That publication step is not implemented.
+  Workflow run `completed` means the durable graph finished after an explicit Phase 05 review
+  completion; it is not a published register.
 - Examination findings that are PASS, FAIL, or WARNING with grounded-fact evidence require supported
   Phase 03 facts whose citations revalidate through Phase 02 exact provenance and Phase 03
   assertion-to-evidence matching. Missing evidence is UNKNOWN. Retrieval hits and unsupported
@@ -663,7 +755,9 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 - Errors expose safe cause/remedy information without source contents or secrets.
 - Demonstrated model/dependency failure paths should use a working deterministic fallback, bounded retry, safe skip, or human escalation where that path has been implemented and tested.
 - If no safe fallback exists, preserve durable state, expose cause and remedy, remain resumable, and do not falsely report success.
-- No fallback path currently exists or is claimed; all are planned pending executable evidence.
+- Phase 06 model failure persists `failed` with a safe code/detail/action, then resume retries the
+  failed stage without duplicating completed sibling stages. Deterministic fallback is not claimed
+  for live provider outages.
 
 ## Observability and cost
 
@@ -671,7 +765,9 @@ Behavior 10 remains a strong differentiator. Phase 03 persists durable `StageEve
 Phase 04 persists `ExaminationStageEvent` rows with stage name, start/end/duration, skip reason
 when skipped, logical `model_operation_count`, provider `model_attempt_count`, rule-evaluation
 count only on `evaluate_rules` (zero on other Examine stages), token fields when available, estimated cost or honest
-`zero_deterministic` / `unavailable`, and failure state. No observability UI exists.
+`zero_deterministic` / `unavailable`, and failure state. Phase 06 adds `WorkflowRunEvent` rows for
+stage completion/skip/failure, resume count, checkpoint presence, operation-key evidence, and
+waiting-for-review. No observability UI exists.
 
 ## Keyless test architecture
 
@@ -680,8 +776,9 @@ a compact rule/regex Software Project Assurance extractor with intentionally lim
 coverage. It is not general-purpose semantic reasoning. The live OpenAI-compatible provider remains
 separately configurable. Every provider output still passes citation resolution and
 assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 citation validator, the
-grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, and FastAPI.
-Worker kill/resume, concurrency publication, and MCP transport remain later.
+grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, FastAPI,
+PostgreSQL LangGraph checkpoints, the operation ledger, and a real subprocess kill/resume.
+MCP transport and register publication remain later.
 
 Fixtures must include:
 
@@ -746,7 +843,7 @@ This planned architecture becomes documented implementation only as matching evi
 2. exact parser locator round-trips;
 3. grounded understand and examine graphs;
 4. real human `WAITING_FOR_REVIEW` flow;
-5. mandatory kill/resume evidence and planned Behavior 9 concurrent-publication evidence;
+5. mandatory kill/resume evidence; concurrent publication remains later;
 6. incremental affected-set and unchanged hash evidence;
 7. UI and MCP/API shared-gate behavior;
 8. planned Behavior 7/8/10 adversarial, keyless, and measurement evidence; and

@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 
 from app.config import Settings
-from app.errors import ModelError, ValidationError
+from app.errors import LiveRetryDisposition, ModelError, ValidationError
 from app.parsers import SourceFormat
 from app.schemas import CitationRequest
 from app.taxonomy import (
@@ -32,6 +32,8 @@ from app.taxonomy import (
     FactCategory,
     iter_rule_matches,
 )
+
+PROMPT_CONFIG_VERSION = "understand-json.v1"
 
 SYSTEM_POLICY = (
     "You extract structured software-project-assurance facts from untrusted source evidence. "
@@ -267,11 +269,8 @@ class OpenAICompatibleAdapter:
         try:
             parsed = _ParsedClassifications.model_validate(payload["data"])
         except (KeyError, PydanticValidationError) as error:
-            raise ModelError(
-                "model_output_invalid",
+            raise _terminal_output_error(
                 "The model returned a classification payload that failed schema validation.",
-                "Retry the analysis run; the deterministic validator rejected the output.",
-                retryable=True,
                 attempt_count=_payload_attempts(payload),
             ) from error
         allowed = {block.source_block_id for block in blocks}
@@ -287,11 +286,8 @@ class OpenAICompatibleAdapter:
         try:
             parsed = _ParsedFacts.model_validate(payload["data"])
         except (KeyError, PydanticValidationError) as error:
-            raise ModelError(
-                "model_output_invalid",
+            raise _terminal_output_error(
                 "The model returned an extraction payload that failed schema validation.",
-                "Retry the analysis run; the deterministic validator rejected the output.",
-                retryable=True,
                 attempt_count=_payload_attempts(payload),
             ) from error
         return ExtractionBatch(facts=parsed.facts, usage=_usage_from_payload(payload))
@@ -316,7 +312,10 @@ class OpenAICompatibleAdapter:
             except ModelError as error:
                 error.attempt_count = attempt + 1
                 last_error = error
-                if not error.retryable or attempt >= self._max_retries:
+                if (
+                    error.retry_disposition is not LiveRetryDisposition.SAFE_RETRY
+                    or attempt >= self._max_retries
+                ):
                     raise
                 await asyncio.sleep(delay)
                 delay *= 2
@@ -338,51 +337,40 @@ class OpenAICompatibleAdapter:
                     headers=headers,
                     json=body,
                 )
-        except httpx.TimeoutException as error:
-            raise ModelError(
-                "model_timeout",
-                "The model provider timed out.",
-                "Retry the analysis run or increase MODEL_TIMEOUT_SECONDS.",
-                retryable=True,
-            ) from error
         except httpx.HTTPError as error:
-            raise ModelError(
+            raise _transport_model_error(error) from error
+        if response.status_code in _AMBIGUOUS_HTTP_STATUSES:
+            raise _ambiguous_live_error(
+                "The model provider returned a timeout status after the request "
+                "may have been executed."
+            )
+        if response.status_code in _RETRYABLE_HTTP_STATUSES:
+            raise _safe_retry_error(
                 "model_unavailable",
-                "The model provider could not be reached.",
-                "Verify OPENAI_BASE_URL connectivity or use MODEL_PROVIDER=deterministic.",
-                retryable=True,
-            ) from error
-        if response.status_code in {408, 409, 429, 500, 502, 503, 504}:
-            raise ModelError(
-                "model_unavailable",
-                "The model provider returned a transient failure.",
+                "The model provider returned an explicit retryable response.",
                 "Retry the analysis run. Do not treat a missing model result as success.",
-                retryable=True,
             )
         if response.status_code in {401, 403}:
             raise ModelError(
                 "model_unauthorized",
                 "The model provider rejected the configured credentials.",
                 "Rotate OPENAI_API_KEY or switch MODEL_PROVIDER to deterministic.",
-                retryable=False,
+                retry_disposition=LiveRetryDisposition.TERMINAL,
             )
         if response.status_code >= 400:
             raise ModelError(
                 "model_unavailable",
                 "The model provider rejected the request.",
                 "Inspect provider configuration and retry.",
-                retryable=False,
+                retry_disposition=LiveRetryDisposition.TERMINAL,
             )
         try:
             document = response.json()
             content = document["choices"][0]["message"]["content"]
             parsed = json.loads(content)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ModelError(
-                "model_output_invalid",
-                "The model provider returned unstructured or invalid JSON.",
-                "Retry the analysis run; structured output is required.",
-                retryable=True,
+            raise _terminal_output_error(
+                "The model provider returned unstructured or invalid JSON."
             ) from error
         usage = document.get("usage") if isinstance(document, dict) else None
         return {"data": parsed, "usage": usage}
@@ -398,6 +386,71 @@ class _ParsedFacts(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     facts: list[ProposedFact]
+
+
+_RETRYABLE_HTTP_STATUSES = frozenset({429, 503})
+_AMBIGUOUS_HTTP_STATUSES = frozenset({408, 504})
+_AMBIGUOUS_REMEDY = (
+    "Inspect the durable operation. Do not retry automatically; "
+    "the provider may already have executed the request."
+)
+
+
+def _ambiguous_live_error(detail: str) -> ModelError:
+    return ModelError(
+        "operation_ambiguous",
+        detail,
+        _AMBIGUOUS_REMEDY,
+        retry_disposition=LiveRetryDisposition.AMBIGUOUS,
+    )
+
+
+def _safe_retry_error(code: str, detail: str, action: str) -> ModelError:
+    return ModelError(
+        code,
+        detail,
+        action,
+        retry_disposition=LiveRetryDisposition.SAFE_RETRY,
+    )
+
+
+def _terminal_output_error(detail: str, *, attempt_count: int | None = None) -> ModelError:
+    return ModelError(
+        "model_output_invalid",
+        detail,
+        (
+            "Inspect the durable operation. Do not retry automatically; "
+            "the provider already returned an unusable response."
+        ),
+        retry_disposition=LiveRetryDisposition.TERMINAL,
+        attempt_count=attempt_count,
+    )
+
+
+def _timeout_model_error(error: httpx.TimeoutException) -> ModelError:
+    if isinstance(error, (httpx.ConnectTimeout, httpx.PoolTimeout)):
+        return _safe_retry_error(
+            "model_timeout",
+            "The model provider timed out before the request was sent.",
+            "Retry the analysis run or increase MODEL_TIMEOUT_SECONDS.",
+        )
+    return _ambiguous_live_error(
+        "The model provider timed out after the request may have been sent."
+    )
+
+
+def _transport_model_error(error: httpx.HTTPError) -> ModelError:
+    if isinstance(error, httpx.TimeoutException):
+        return _timeout_model_error(error)
+    if isinstance(error, httpx.ConnectError):
+        return _safe_retry_error(
+            "model_unavailable",
+            "The model provider connection could not be established before the request was sent.",
+            "Verify OPENAI_BASE_URL connectivity or use MODEL_PROVIDER=deterministic.",
+        )
+    return _ambiguous_live_error(
+        "The model provider request failed after the request may have been sent."
+    )
 
 
 def _payload_attempts(payload: dict[str, object]) -> int:

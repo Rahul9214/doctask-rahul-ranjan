@@ -2,13 +2,16 @@
 
 ## Current status
 
-**Phase 05 — Human Review: local initial PASS; independent verification FAIL / NO-GO;
-correction implemented locally pending re-verification.** Phase 04
-historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03 current status is independent
-final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS (2 successful
-checks).
+**Phase 06 — Durable Resume: initial local PASS; independent verification FAIL / NO-GO;
+first correction implemented locally; independent re-verification NO-GO; second live-retry
+correction implemented locally; retry-allowlist re-verification NO-GO; exclusive retry-allowlist
+correction implemented locally and not independently re-verified.**
+Phase 05 historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03 current status is
+independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS
+(2 successful checks).
 
-The repository now provides grounded Understand and Examine over the Phase 02 data layer:
+The repository now provides grounded Understand and Examine over the Phase 02 data layer, plus a
+PostgreSQL-backed durable workflow that can survive process death:
 
 - corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
   application contract and API/service behavior;
@@ -25,14 +28,16 @@ The repository now provides grounded Understand and Examine over the Phase 02 da
   load understanding → select rules → evaluate rules → validate evidence → summarize → finalize;
 - `ExaminationRun`, `Finding`, and `ExaminationStageEvent` records with corpus isolation;
 - an explicit human review gate: `ReviewSession`, `ReviewItem`, and append-only `ReviewDecision`
-  records; FAIL/WARNING/UNKNOWN findings require a decision; generation never auto-approves; and
-- all verified Phase 01–04 foundation capabilities.
+  records; FAIL/WARNING/UNKNOWN findings require a decision; generation never auto-approves;
+- a durable workflow run (`WorkflowRun`) that coordinates Understand → Examine → human review with
+  LangGraph PostgreSQL checkpoints, a costly-operation ledger, and real process-kill resume; and
+- all verified Phase 01–05 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
 internet-facing production hardening remain excluded.
 
-**Durable kill/resume, MCP business operations, watching/incremental updates, register publication,
-and production deployment are not implemented.**
+**MCP business operations, watching/incremental updates, register publication, and production
+deployment are not implemented.**
 
 ## Runtime and dependency baseline
 
@@ -50,7 +55,8 @@ Primary backend versions are locked in `backend/uv.lock`:
 
 - FastAPI 0.141.1, Pydantic 2.13.4, pydantic-settings 2.15.0
 - SQLAlchemy 2.0.52, asyncpg 0.31.0, Alembic 1.19.1
-- LangGraph 1.2.11 (Understand workflow) and langgraph-checkpoint-postgres 3.1.2 (locked, unused)
+- LangGraph 1.2.11 (Understand, Examine, and the durable workflow graph)
+- langgraph-checkpoint-postgres 3.1.2 and psycopg[binary] 3.3.4 (PostgreSQL checkpointer)
 - httpx 0.28.1 (OpenAI-compatible live provider path)
 - pgvector 0.5.0 (used for SQLAlchemy `vector(64)` storage and cosine queries)
 - pypdf 6.16.1, python-docx 1.2.0, and python-multipart 0.0.32
@@ -149,9 +155,10 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.5.0`, current Phase 05 metadata, and a truthful statement that
-grounded Understand, Examine, and item-level human review are implemented while durable resume, MCP
-business operations, watching, and register publication are not.
+Returns application version `0.6.0`, current Phase 06 metadata, and a truthful statement that
+durable checkpoint/resume over grounded Understand, Examine, and the explicit human-review gate is
+implemented, while MCP business operations, watching, incremental updates, and register publication
+are not.
 
 ### Phase 02 corpus and source API
 
@@ -286,6 +293,42 @@ items return `review_session_incomplete`. Cross-corpus session/item lookups retu
 Vector scores are not evidence. The same operations are available to the React review panel and to
 machine/API clients. MCP is not implemented.
 
+### Phase 06 Durable Workflow API
+
+- `POST /corpora/{corpus_id}/workflow-runs` — start Understand → Examine → human-review gate
+- `GET /corpora/{corpus_id}/workflow-runs/{run_id}`
+- `POST /corpora/{corpus_id}/workflow-runs/{run_id}/resume`
+- `GET /corpora/{corpus_id}/workflow-runs/{run_id}/events`
+
+Every operation is corpus-scoped. Cross-corpus run lookups return not found without traceback.
+`checkpoint_thread_id` equals the workflow run id. Status values are `pending`, `running`,
+`waiting_for_review`, `failed`, and `completed`. Failed is not waiting.
+
+Start and resume are synchronous in the API process. A dedicated PostgreSQL session-level advisory
+lock (`workflow-run:{run_id}`) covers claim, checkpoint inspect, optional failed-thread reset, graph
+invoke, and final state update. Concurrent resumes of the same run serialize; `resume_count`
+increments once per actual execution after that lock, not merely because a second caller arrived.
+A run that reaches human review stops at `waiting_for_review`. Resume of a waiting run does not
+auto-approve, create decisions, or bypass pending items. After the Phase 05 session is explicitly
+completed, resume continues to `completed`. Resume of an already-completed run returns
+`workflow_run_already_completed`. A pending/running run with no checkpoint re-enters the same
+run/thread from canonical initial state. Publication is not performed.
+
+Costly model calls go through a durable operation ledger. The canonical operation key is SHA-256 of
+the sorted JSON of: workflow run id, stage, operation type, source-input version, canonical request
+hash, model provider, model name, taxonomy version, Understand graph version, prompt/config version,
+and outer workflow graph version. Timestamps and other runtime-only metadata are excluded.
+Deterministic mode records zero external cost. Process-kill recovery is proven by
+`tests/test_process_kill_resume.py` using `scripts/durable_workflow_worker.py`:
+
+```text
+REAL PROCESS TERMINATION → NEW PROCESS → SAME RUN → RESUME
+```
+
+```powershell
+uv run pytest tests/test_process_kill_resume.py::test_real_process_kill_then_new_process_resumes_same_run
+```
+
 ### Normalization and exact provenance
 
 Original bytes are written under generated version keys and treated as immutable by application
@@ -375,11 +418,8 @@ uv run python scripts/ensure_test_database.py
 uv run alembic upgrade head
 
 $env:DATABASE_URL = $testDatabaseUrl
-# If this database was already stamped at the previous uncommitted 0004 JSON-evidence schema,
-# Alembic will not reapply revision 20260819_0004. Drop leftover Phase 04 objects only, stamp
-# 20260819_0003, then continue. Do not run that recovery against non-test data.
 uv run alembic upgrade head
-uv run alembic downgrade 20260819_0004
+uv run alembic downgrade 20260819_0005
 uv run alembic upgrade head
 uv run alembic current
 
@@ -412,17 +452,18 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.5.0`,
-`Phase 05 — Human Review`, grounded Understand/Examine plus item-level human review, and the absence
-of durable resume, MCP watching, and register publication. The frontend status shell includes a
-minimal review panel.
+All three services should report healthy. `/version` should report application version `0.6.0`,
+`Phase 06 — Durable Resume`, durable checkpoint/resume over grounded Understand/Examine plus the
+explicit human-review gate, and the absence of MCP, watching, and register publication. The
+frontend status shell includes a minimal review panel.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pull requests to `main` and pushes to `main`.
 
-- Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Ruff format/lint, mypy,
-  pytest with coverage, and package build.
+- Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Phase 06 test-database
+  round-trip `0005 → 0006 → 0005 → 0006`, Ruff format/lint, mypy, pytest with coverage (includes
+  real process-kill/resume), and package build.
 - Frontend: Node 22.20.0, `npm ci`, Prettier, ESLint, TypeScript, Vitest, and production build.
 
 No deployment workflow exists.
@@ -479,12 +520,33 @@ No deployment workflow exists.
 - Examine evaluates a centrally versioned ruleset against grounded Phase 03 facts. It is not a
   user-upload rule editor, generic expression engine, or register-publication step.
 - Human review is an explicit item-level gate over Examine findings. It does not publish a register
-  version, resume a durable worker, or provide MCP tools.
-- Durable resume, MCP business operations, watching, and register publication remain unimplemented.
-- LangGraph PostgreSQL checkpoint/interrupt behavior is not used.
+  version or provide MCP tools.
+- Durable resume is implemented for the workflow run. It does not publish approved items, watch a
+  filesystem inbox, or run a separate worker fleet. The API process executes the graph; the
+  subprocess worker exists for kill/resume proof.
+- Local completed persistence (A): a ledger row `completed` with result hash/payload is reused and
+  does not call the provider again.
+- Logical idempotency (B): one logical operation per canonical key; `logical_operation_count = 1`
+  after success. Provider attempts may be greater than one only under a safe retry policy.
+- Provider ambiguity (C): if a live call may have executed and the local result was not stored, the
+  row is `ambiguous`. Exactly-once provider execution is not claimed.
+- Safe retry vs fail-closed live policy (D): the live adapter automatic retry allowlist is
+  exclusive: `ConnectTimeout`, `PoolTimeout`, `ConnectError`, HTTP 429, and HTTP 503. The live
+  request loop retries only a `SAFE_RETRY` disposition, not a generic `retryable` flag.
+  Malformed/unusable HTTP 200 output is a terminal `model_output_invalid` and is not retried.
+  `ReadTimeout`, `WriteTimeout`, unknown `TimeoutException`, HTTP 408, HTTP 504,
+  `RemoteProtocolError`, and other unclassified `httpx.HTTPError` values are
+  `operation_ambiguous` and are not retried. When classification is uncertain, the live path
+  fails closed to `ambiguous`. Deterministic mode may reconcile `ambiguous`. Provider
+  idempotency is not configured.
+- Failed-stage resume is a same-run/thread restart: under the session lock it deletes only that
+  thread's LangGraph checkpoint rows and re-enters from durable business/ledger state. It is not
+  in-place continuation of a failed LangGraph node.
+- MCP business operations, watching, incremental updates, and register publication remain
+  unimplemented.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–05 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–06 architecture and later-phase plans

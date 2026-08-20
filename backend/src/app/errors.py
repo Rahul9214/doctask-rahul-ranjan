@@ -1,3 +1,17 @@
+from enum import StrEnum
+
+
+class LiveRetryDisposition(StrEnum):
+    """Exclusive live-provider retry classification.
+
+    SAFE_RETRY is the only disposition that may repeat an external request.
+    """
+
+    SAFE_RETRY = "safe_retry"
+    AMBIGUOUS = "ambiguous"
+    TERMINAL = "terminal"
+
+
 class Phase02Error(Exception):
     def __init__(self, code: str, detail: str, action: str) -> None:
         super().__init__(detail)
@@ -34,8 +48,14 @@ class ModelError(Phase02Error):
         action: str,
         *,
         retryable: bool = False,
+        retry_disposition: LiveRetryDisposition | None = None,
         attempt_count: int | None = None,
     ) -> None:
         super().__init__(code, detail, action)
-        self.retryable = retryable
+        if retry_disposition is None:
+            self.retry_disposition = LiveRetryDisposition.TERMINAL
+            self.retryable = retryable
+        else:
+            self.retry_disposition = retry_disposition
+            self.retryable = retry_disposition is LiveRetryDisposition.SAFE_RETRY
         self.attempt_count = attempt_count

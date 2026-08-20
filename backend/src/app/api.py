@@ -32,9 +32,12 @@ from app.schemas import (
     SourceVersionResponse,
     StageEventResponse,
     UnderstandingResponse,
+    WorkflowRunEventResponse,
+    WorkflowRunResponse,
 )
 from app.services import Phase02Service
 from app.understand_service import UnderstandService
+from app.workflow_service import WorkflowService
 
 router = APIRouter()
 
@@ -55,10 +58,15 @@ def get_review_service(request: Request) -> ReviewService:
     return cast(ReviewService, request.app.state.review_service)
 
 
+def get_workflow_service(request: Request) -> WorkflowService:
+    return cast(WorkflowService, request.app.state.workflow_service)
+
+
 Service = Annotated[Phase02Service, Depends(get_phase02_service)]
 Understand = Annotated[UnderstandService, Depends(get_understand_service)]
 Examine = Annotated[ExamineService, Depends(get_examine_service)]
 Review = Annotated[ReviewService, Depends(get_review_service)]
+Workflow = Annotated[WorkflowService, Depends(get_workflow_service)]
 
 
 @router.post("/corpora", response_model=CorpusResponse, status_code=status.HTTP_201_CREATED)
@@ -366,3 +374,45 @@ async def complete_review_session(
     corpus_id: UUID, review_session_id: UUID, review: Review
 ) -> ReviewSessionResponse:
     return session_response(await review.complete_session(corpus_id, review_session_id))
+
+
+@router.post(
+    "/corpora/{corpus_id}/workflow-runs",
+    response_model=WorkflowRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_workflow_run(corpus_id: UUID, workflow: Workflow) -> WorkflowRunResponse:
+    return WorkflowRunResponse.model_validate(await workflow.create_run(corpus_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/workflow-runs/{run_id}",
+    response_model=WorkflowRunResponse,
+)
+async def get_workflow_run(
+    corpus_id: UUID, run_id: UUID, workflow: Workflow
+) -> WorkflowRunResponse:
+    return WorkflowRunResponse.model_validate(await workflow.get_run(corpus_id, run_id))
+
+
+@router.post(
+    "/corpora/{corpus_id}/workflow-runs/{run_id}/resume",
+    response_model=WorkflowRunResponse,
+)
+async def resume_workflow_run(
+    corpus_id: UUID, run_id: UUID, workflow: Workflow
+) -> WorkflowRunResponse:
+    return WorkflowRunResponse.model_validate(await workflow.resume_run(corpus_id, run_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/workflow-runs/{run_id}/events",
+    response_model=list[WorkflowRunEventResponse],
+)
+async def list_workflow_run_events(
+    corpus_id: UUID, run_id: UUID, workflow: Workflow
+) -> list[WorkflowRunEventResponse]:
+    return [
+        WorkflowRunEventResponse.model_validate(event)
+        for event in await workflow.list_events(corpus_id, run_id)
+    ]

@@ -377,9 +377,9 @@ Exit only after a real human-driven acceptance flow has been demonstrated.
 
 ### Phase 06 — durable resume and concurrency (1.75h)
 
-Implement PostgreSQL checkpoints/jobs, idempotency, process failpoints, resume, run isolation, and safe version publication using the simplest adequate mechanism.
+Implement PostgreSQL checkpoints/jobs, idempotency, process failpoints, resume, and run isolation using the simplest adequate mechanism.
 
-Required exit is proven kill/resume. Concurrent same-corpus proof remains the planned Behavior 9 target and may be cut only with explicit rationale.
+Required exit is proven kill/resume. Concurrent same-corpus run isolation is implemented for independent workflow runs, checkpoints, and operation keys. Register publication remains later: a resumed run stops at the explicit human-review gate and does not apply approved items to a published register version. Concurrent same-corpus publication proof remains the planned Behavior 9 remainder and may be cut only with explicit rationale.
 
 ### Phase 07 — incremental watched updates (2h)
 
