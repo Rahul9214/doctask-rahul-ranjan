@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal, TypedDict, cast
 from uuid import UUID, uuid4
@@ -300,6 +301,34 @@ class ExamineWorkflow:
             "completed",
         )
         return {}
+
+    async def revalidate_finding_payloads(
+        self,
+        *,
+        corpus_id: UUID,
+        analysis_run_id: UUID,
+        findings: Sequence[dict[str, object]],
+        view: UnderstandingView,
+        classifications: Sequence[dict[str, object]] = (),
+    ) -> None:
+        """Reuse Phase 04 citation/assertion revalidation for incremental findings."""
+
+        untrusted_ids = _untrusted_block_ids({"classifications": list(classifications)})
+        for raw in findings:
+            evaluation = _evaluation_from_payload(raw)
+            reason = validate_evaluation(evaluation, view)
+            if reason is not None:
+                raise ValidationError(
+                    "examination_evidence_invalid",
+                    "An examination finding was not grounded in supported Phase 03 evidence.",
+                    "Inspect the analysis run facts and contradictions, then retry.",
+                )
+            await self._revalidate_finding_evidence(
+                corpus_id=corpus_id,
+                analysis_run_id=analysis_run_id,
+                evaluation=evaluation,
+                untrusted_ids=untrusted_ids,
+            )
 
     async def summarize_findings(self, state: ExamineState) -> ExamineState:
         started = utcnow()

@@ -3,24 +3,24 @@
 ## Status
 
 **Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, Phase 04
-Examine, Phase 05 item-level human review, and Phase 06 durable resume are implemented.** Independent
-Phase 03 FAIL (grounding) and follow-up NO-GO remain historical record. Phase 03 current status is
-independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS.
-Phase 04 and Phase 05 independent FAIL / NO-GO remain historical. Phase 06 initial local
-implementation PASS; independent verification FAIL / NO-GO; a first correction pass was implemented
-locally; independent re-verification of that correction was NO-GO; a second live-retry correction is
-implemented locally; retry-allowlist re-verification was NO-GO; an exclusive retry-allowlist
-correction is implemented locally and is not independently re-verified. Examine consumes grounded
+Examine, Phase 05 item-level human review, Phase 06 durable resume, and Phase 07 focused incremental
+updates are implemented.** Independent Phase 03 FAIL (grounding) and follow-up NO-GO remain historical
+record. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged to `main`
+as `ceb2bf0`, remote CI PASS. Phase 04 and Phase 05 independent FAIL / NO-GO remain historical.
+Phase 06 initial local implementation PASS; independent verification FAIL / NO-GO; later exclusive
+retry-allowlist correction is implemented locally and is not independently re-verified. Phase 07 is
+a local implementation PASS and is not independently re-verified. Examine consumes grounded
 Phase 03 records and revalidates
 Phase 02 provenance before persisting definitive findings. Human review creates an explicit
 `WAITING_FOR_REVIEW` session from a completed examination and records item-level approve/reject/edit
 decisions without publishing a register. Durable workflow runs coordinate those stages with
 PostgreSQL LangGraph checkpoints, a session-level same-run execution lock, an operation ledger, and
-process-kill resume.
+process-kill resume. Incremental runs detect SHA-256 source-version changes against a durable
+corpus revision, recompute only provenance-affected work, reuse unaffected artifacts with canonical
+unchanged-byte proof, and persist executed-versus-reused operation evidence.
 
-MCP business tools, incremental updates, the watcher, register publication, and production
-deployment remain planned. Implementation evidence may simplify or revise those plans; revisions are
-recorded in `PROGRESS.md`.
+MCP business tools, register publication, and production deployment remain planned. Implementation
+evidence may simplify or revise those plans; revisions are recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -40,7 +40,7 @@ It does not exist to demonstrate infrastructure breadth.
 
 The explicit non-cuttable floor is limited to behaviors 1–5: visible path-changing stages, durable resume, item-level human review, machine-driven flow, and no-bluffing. Understand, examine, and stay alive must each remain genuinely represented, but detailed sub-features inside the movements may be cut with explicit rationale.
 
-One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Concurrent publication, MCP, and one-command stranger-setup polish remain later.
+One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Phase 07 implements focused incremental stay-alive with executable no-full-rerun proof. Concurrent publication, MCP, and one-command stranger-setup polish remain later.
 
 ## Stack classification
 
@@ -55,7 +55,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01–06 runtime
+## Implemented Phase 01–07 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -68,10 +68,18 @@ flowchart LR
     API --> P4[ExamineService]
     API --> P5[ReviewService]
     API --> P6[WorkflowService]
+    API --> P7[IncrementalService]
+    API --> Watch[StableFileWatcher]
     P6 --> DurableGraph[LangGraphDurableWorkflow]
     DurableGraph --> P3
     DurableGraph --> P4
     DurableGraph --> P5
+    P7 --> P2
+    P7 --> P3
+    P7 --> P4
+    P7 --> P5
+    Watch --> P2
+    Watch --> P7
     P3 --> Graph[LangGraphUnderstand]
     P4 --> ExamineGraph[LangGraphExamine]
     Graph --> Ledger[OperationLedger]
@@ -81,6 +89,8 @@ flowchart LR
     P4 --> DB
     P5 --> DB
     P6 --> DB
+    P7 --> DB
+    Watch --> DB
     DurableGraph --> Checkpoints[LangGraphPostgresCheckpoints]
     Checkpoints --> DB
     P2 --> Store[MountedSourceStore]
@@ -89,7 +99,8 @@ flowchart LR
 
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
 - FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
-  analysis-run, Examine examination-run, human-review, and durable workflow-run routes.
+  analysis-run, Examine examination-run, human-review, durable workflow-run, corpus-revision, and
+  incremental-run routes. `POST /watcher/poll` is available when `WATCH_INPUT_PATH` is set.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
@@ -99,7 +110,8 @@ flowchart LR
   `20260819_0004` creates `examination_runs`, `findings`, and `examination_stage_events`;
   `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`;
   `20260819_0006` creates `workflow_runs`, `durable_operations`, `workflow_run_events`, and
-  LangGraph checkpoint tables.
+  LangGraph checkpoint tables; `20260819_0007` creates `corpus_revisions`, `incremental_runs`,
+  `incremental_artifact_evidence`, and `watcher_files`.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
@@ -345,6 +357,26 @@ Phase 05 implements a minimal review panel in the existing React/TypeScript shel
 
 Rich document editing, stage timelines, and observability dashboards remain later.
 
+### Simple watched inbox
+
+Implemented as stable-file polling of a mounted inbox. Contract:
+
+- Path: `{WATCH_INPUT_PATH}/{corpus_id}/{logical_name}.{ext}`
+- Eligibility: identical SHA-256 and byte size across `WATCH_STABLE_POLLS` consecutive polls
+- Identity: content hash, not filesystem mtime
+- Duplicate unchanged bytes after `completed`/`unchanged` do not retrigger
+- Restart uses persisted `watcher_files` rows
+- Partial/in-progress writes reset the stability counter
+- Ingest without a successful incremental run stays `ingested_incremental_pending` or
+  `failed_retryable` and retries incremental on the same SHA-256 without a new SourceVersion
+- Terminal malformed files stay `failed_terminal` until bytes change
+- Temporary disappearance of an ingested/unchanged/completed file is recorded as `missing`;
+  SourceVersion rows are not deleted
+- Upload safety: generated storage keys, extension/type validation, content bounds, traversal
+  rejection, no source-content logging
+
+A sophisticated event system (watchdog, inotify, Kafka, Celery, Redis) is not used.
+
 ### Chosen MCP server
 
 Planned as a thin adapter over the same application services as FastAPI:
@@ -357,10 +389,6 @@ Planned as a thin adapter over the same application services as FastAPI:
 - verify the resulting published register and audit history.
 
 MCP exposes the gate but does not bypass it. The demonstrated path must not let the proposing agent automatically approve its own proposals. This is a workflow requirement, not an added RBAC or proposer/reviewer identity-separation requirement.
-
-### Simple watched inbox
-
-The minimum watcher polls a mounted directory, waits for file size/mtime stability, hashes content, and creates an idempotent source-arrival operation. A sophisticated event system is unnecessary unless executable evidence shows polling cannot satisfy focused incremental behavior.
 
 ## Core records
 
@@ -414,6 +442,43 @@ Implemented in Phase 06:
   `failed`, or `ambiguous`. Records logical operation count, provider attempts, result hash/payload,
   and provider idempotency identifier. CHECK constraints reject invalid lifecycle combinations.
 - `WorkflowRunEvent`: append-only stage/resume/failure/checkpoint evidence for one run.
+
+Implemented in Phase 07:
+
+- `CorpusRevision`: durable incremental baseline/current snapshot for one corpus. Stores revision
+  number, `is_current` (one current row per corpus), linked analysis/examination/review identifiers,
+  a JSON source-version snapshot for API convenience, and taxonomy/graph/prompt/ruleset/examine
+  versions. Authoritative membership is `corpus_revision_sources`. PostgreSQL enforces the chain
+revision → corpus → source → source version → exact SHA-256: membership rows FK to
+`(source_version_id, source_id, corpus_id, sha256)` against `source_versions`
+`(id, source_id, corpus_id, sha256)`. The recorded SHA is not free-standing authority.
+Advancing N to N+1 flips `is_current`, writes membership, and completes
+the incremental run in one transaction. A crash after Understand/Examine/review rows are
+written but before that finalization transaction may leave non-current orphan
+`AnalysisRun`, `ExaminationRun`, and `ReviewSession` rows. They cannot become current
+revision state, are not reused as the authoritative baseline, are not deleted automatically,
+and cleanup/reconciliation is deferred.
+- `IncrementalRun`: one incremental execution against a recorded baseline revision. Status is
+  `pending`, `running`, `completed`, `failed`, or `stale_baseline`. Change kind is
+  `unchanged`, `changed`, `added`, `removed`, `mixed`, or `stale_baseline`. Impact, evidence, and
+  measurement JSONB persist executed-versus-reused IDs, durable operation keys, canonical
+  unchanged-artifact hashes from persisted rows, stages executed/skipped from actual control flow,
+  and raw stage/model counts. Completed requires `completed_at`; stale does not.
+- `IncrementalArtifactEvidence`: per-artifact disposition (`reused`, `recomputed`, `added`,
+  `removed`, `executed`, `skipped`, `unchanged`, `obsolete`) with canonical hashes before/after
+  and optional `durable_operation_id` for ledger-backed operation reuse.
+- `DurableOperation.workflow_run_id` is nullable from Phase 07 so content-keyed classify/extract
+  rows can belong to an incremental run instead of a workflow run. Reuse is claimed only when a
+  completed ledger row with that content identity exists. Downgrade `20260819_0007` →
+  `20260819_0006` deletes incremental-owned ledger rows (`incremental_run_id IS NOT NULL` or
+  `workflow_run_id IS NULL`) and drops watcher/evidence/incremental-run tables **before** restoring
+  `workflow_run_id` NOT NULL. Workflow-owned ledger rows remain. Phase 07 revision/run/evidence
+  data is discarded by that downgrade; that is the reverse of the upgrade, not a data-preserving
+  rollback.
+- `WatcherFile`: unique `(inbox_root, relative_path)` poller state. Status is `observing`,
+  `stable`, `ingested_incremental_pending`, `processing_incremental`, `completed`,
+  `failed_retryable`, `failed_terminal`, `unchanged`, or `missing`. Restart uses these rows so
+  unchanged completed bytes are not re-ingested, while pending incremental work is retried.
 
 LangGraph checkpoint tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`,
 `checkpoint_migrations`) are created by migration `20260819_0006` and owned by
@@ -615,25 +680,57 @@ not implemented because no published register exists yet.
 
 ## Incremental stay-alive movement
 
-For each stable new file/source version:
+Phase 07 implements focused incremental updates over an already processed corpus. Register
+publication is not part of this phase.
 
-1. stream, hash, and deduplicate the content;
-2. parse/index only the new source version;
-3. extract candidate entity keys and changed facts;
-4. find potentially affected register items through stable keys, citation backlinks, contradiction groups, rule dependencies, and conservative semantic retrieval;
-5. record the planned affected set before generation;
-6. re-run understand/examine only for that set;
-7. create item-level changes with before/after hashes;
-8. surface new contradictions;
-9. wait for real human review;
-10. apply only approved changes to a new register version; and
-11. verify every unaffected item retains identical canonical bytes and SHA-256.
+Change identity is logical source plus SHA-256. Timestamps are not used. UNCHANGED identical bytes
+reuse the existing SourceVersion. CHANGED bytes create a new immutable SourceVersion. ADDED is a
+new logical source. REMOVED is planned when a logical source disappears from the latest version
+set; the watcher records temporarily missing inbox files and does not delete Source/SourceVersion
+rows.
 
-The audit ledger records source cause, affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, canonical before/after hashes, decisions, timestamp, and resulting version.
+Impact uses explicit provenance, not vector similarity and not corpus-name special cases:
 
-A new source may be fully parsed/indexed. Existing unaffected sources and register items must not receive a full-corpus model pass disguised as incremental work.
+- a fact citing a changed/retired source version is affected;
+- a contradiction referencing an affected fact is affected;
+- a finding/rule whose required category/subject inputs may have changed is affected;
+- `spa.contradiction.open` is treated as corpus-wide remaining-contradiction state and is rerun
+  when contradictions change or a source is new/changed.
 
-Incremental evidence compares all of those fields before and after the update. Hash equality proves preservation, but hash equality alone does not prove that a full rerun was avoided.
+Unaffected supported facts are copied into a new AnalysisRun with new row ids and identical
+canonical business payloads. Unrelated contradictions and rule findings are remapped similarly.
+Changed/new source versions are classified and extracted only. Unchanged sources are recorded as
+skipped classify/extract source-version IDs. A new ExaminationRun and a new ReviewSession are
+created. The previous review session remains immutable. New items start pending. Prior approvals
+are never copied. Byte-identical review proposals are labelled `reused` only after independently serializing
+persisted baseline and incremental `ReviewItem` + Finding/evidence rows with
+`incremental-artifact.v1`. Canonical review identity includes rule id/version, outcome,
+severity, title, message, structured_reason, evidence_kind, canonical fact and contradiction
+identities, citation/source-version identity, and `review_required`. It excludes
+`review_session_id`, `review_item_id`, timestamps, and current decision state. Differing
+canonical bytes cannot be labelled reused. Materially changed proposals require fresh explicit
+review. Unchanged reusable
+artifacts must have identical canonical hashes before and after reuse. Hash equality proves
+preservation; executed-versus-skipped classify **and** extract source versions, reused-versus-recomputed artifact IDs,
+content operation keys, and stages executed/skipped prove that a full Understand rerun was avoided.
+
+A crash after incremental Understand/Examine/review rows are written but before atomic revision
+finalization may leave non-current orphan `AnalysisRun`, `ExaminationRun`, and `ReviewSession`
+rows. They cannot become current revision state, are not reused as the authoritative baseline,
+are not deleted automatically, and cleanup/reconciliation is deferred.
+
+Same-corpus incremental execution is serialized with
+`pg_advisory_lock(hashtext('incremental-corpus:{corpus_id}'))`. An explicit baseline that is not
+current persists `stale_baseline` and does not apply a mixed-base result. The API maps that status
+to HTTP 409.
+
+Incremental content operation keys omit workflow run id and incorporate source-input versions plus
+taxonomy/graph/prompt versions. Changed immutable source input yields a distinct key. Phase 06
+workflow keys are unchanged.
+
+Deterministic mode records `estimated_cost_usd = 0`. Measurement persists baseline versus
+incremental stage counts, avoided model-operation count (unchanged sources skipped), affected/
+reused artifact counts, changed-source count, and duration. Cost savings are not fabricated.
 
 ## Durability, idempotency, and concurrency
 
@@ -675,6 +772,10 @@ Implemented PostgreSQL-backed mechanism:
 - Same-corpus concurrent workflow runs use distinct run/thread ids. Operation keys include
   `workflow_run_id`, so they cannot collide across runs. Concurrent duplicate requests for one key
   are serialized with a session-level `pg_advisory_lock`.
+- Same-corpus incremental runs are serialized with
+  `pg_advisory_lock(hashtext('incremental-corpus:{corpus_id}'))`. At most one run advances the
+  current `CorpusRevision` from N to N+1. A stale explicit baseline is persisted as
+  `stale_baseline` and is not applied.
 - `wait_for_review` calls `interrupt()`. Resume sends `Command(resume=...)` only when interrupts
   exist **and** the Phase 05 review session is completed. A resume while required items are still
   pending re-reads durable state and stays `waiting_for_review`; it does not auto-approve, create
@@ -767,7 +868,10 @@ when skipped, logical `model_operation_count`, provider `model_attempt_count`, r
 count only on `evaluate_rules` (zero on other Examine stages), token fields when available, estimated cost or honest
 `zero_deterministic` / `unavailable`, and failure state. Phase 06 adds `WorkflowRunEvent` rows for
 stage completion/skip/failure, resume count, checkpoint presence, operation-key evidence, and
-waiting-for-review. No observability UI exists.
+waiting-for-review. Phase 07 persists incremental measurement JSON: baseline versus incremental
+stage counts, classify/extract executed versus skipped source-version IDs, avoided model-operation
+count, affected/reused artifact counts, changed-source count, duration, and `estimated_cost_usd=0`
+in deterministic mode. No observability UI exists.
 
 ## Keyless test architecture
 
@@ -777,7 +881,8 @@ coverage. It is not general-purpose semantic reasoning. The live OpenAI-compatib
 separately configurable. Every provider output still passes citation resolution and
 assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 citation validator, the
 grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, FastAPI,
-PostgreSQL LangGraph checkpoints, the operation ledger, and a real subprocess kill/resume.
+PostgreSQL LangGraph checkpoints, the operation ledger, a real subprocess kill/resume, focused
+incremental Aurora/Harbor second runs, stale-baseline concurrency, and stable-file watcher polling.
 MCP transport and register publication remain later.
 
 Fixtures must include:
@@ -807,6 +912,8 @@ Fixtures must include:
 - Review decisions record a human actor and proposal version.
 - Phase 02 source versions/blocks are not overwritten through application APIs/services; database
   mutation-prevention triggers and restricted roles are absent.
+- Watcher inbox paths reject traversal, unsupported extensions, empty files, and oversized files.
+  Source contents are not logged.
 - No certification or guaranteed-redaction claim is made.
 
 ## Deliberate exclusions and cut order
@@ -844,7 +951,8 @@ This planned architecture becomes documented implementation only as matching evi
 3. grounded understand and examine graphs;
 4. real human `WAITING_FOR_REVIEW` flow;
 5. mandatory kill/resume evidence; concurrent publication remains later;
-6. incremental affected-set and unchanged hash evidence;
+6. incremental affected-set, executed-versus-reused operations, and unchanged canonical-hash
+   evidence (Phase 07 local implementation);
 7. UI and MCP/API shared-gate behavior;
 8. planned Behavior 7/8/10 adversarial, keyless, and measurement evidence; and
 9. planned Behavior 6 fresh-clone local/container audit on a second corpus.

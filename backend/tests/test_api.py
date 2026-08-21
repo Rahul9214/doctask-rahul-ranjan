@@ -74,16 +74,15 @@ def test_version_is_truthful_about_phase_scope() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "app_version": "0.6.0",
-        "current_phase": "Phase 06 — Durable Resume",
+        "app_version": "0.7.0",
+        "current_phase": "Phase 07 — Incremental Updates",
         "implementation_status": (
-            "Durable checkpoint/resume over grounded Understand, Examine, and the explicit "
-            "human-review gate is implemented: PostgreSQL LangGraph checkpoints, a session-level "
-            "advisory lock spanning graph execution, an operation ledger for costly calls, "
-            "process-kill recovery, and same-corpus run isolation. Automatic live retries are "
-            "exclusive to ConnectTimeout, PoolTimeout, ConnectError, HTTP 429, and HTTP 503. "
-            "Malformed HTTP 200 output and uncertain timeouts or post-send transport failures "
-            "are not retried automatically. MCP business operations, watching, incremental "
-            "updates, and register publication are not implemented."
+            "Focused incremental updates and stable-file inbox watching are implemented over "
+            "grounded Understand, Examine, explicit human review, and durable resume: SHA-256 "
+            "source-version change detection, provenance impact analysis, reuse of unaffected "
+            "artifacts with canonical unchanged-byte proof, executed-versus-reused operation "
+            "evidence, conservative fresh review for changed evidence, and stale-baseline "
+            "concurrency control. MCP business operations and register publication are not "
+            "implemented."
         ),
     }

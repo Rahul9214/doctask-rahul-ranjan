@@ -2,16 +2,15 @@
 
 ## Current status
 
-**Phase 06 — Durable Resume: initial local PASS; independent verification FAIL / NO-GO;
-first correction implemented locally; independent re-verification NO-GO; second live-retry
-correction implemented locally; retry-allowlist re-verification NO-GO; exclusive retry-allowlist
-correction implemented locally and not independently re-verified.**
-Phase 05 historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03 current status is
-independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS
-(2 successful checks).
+**Phase 07 — Incremental Updates: local implementation PASS, not independently re-verified.**
+Phase 06 historical independent FAIL / NO-GO and later exclusive retry-allowlist correction remain
+in `PROGRESS.md`. Phase 05 historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03
+current status is independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`,
+remote CI PASS (2 successful checks).
 
-The repository now provides grounded Understand and Examine over the Phase 02 data layer, plus a
-PostgreSQL-backed durable workflow that can survive process death:
+The repository now provides grounded Understand and Examine over the Phase 02 data layer, a
+PostgreSQL-backed durable workflow that can survive process death, and focused incremental updates
+over an immutable corpus baseline:
 
 - corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
   application contract and API/service behavior;
@@ -30,14 +29,16 @@ PostgreSQL-backed durable workflow that can survive process death:
 - an explicit human review gate: `ReviewSession`, `ReviewItem`, and append-only `ReviewDecision`
   records; FAIL/WARNING/UNKNOWN findings require a decision; generation never auto-approves;
 - a durable workflow run (`WorkflowRun`) that coordinates Understand → Examine → human review with
-  LangGraph PostgreSQL checkpoints, a costly-operation ledger, and real process-kill resume; and
-- all verified Phase 01–05 foundation capabilities.
+  LangGraph PostgreSQL checkpoints, a costly-operation ledger, and real process-kill resume;
+- focused incremental updates (`CorpusRevision`, `IncrementalRun`) that detect SHA-256 source
+  changes, recompute only provenance-affected work, reuse unaffected artifacts with canonical
+  unchanged-byte proof, and persist executed-versus-reused operation evidence; and
+- all verified Phase 01–06 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
 internet-facing production hardening remain excluded.
 
-**MCP business operations, watching/incremental updates, register publication, and production
-deployment are not implemented.**
+**MCP business operations, register publication, and production deployment are not implemented.**
 
 ## Runtime and dependency baseline
 
@@ -121,6 +122,9 @@ Important variables:
 - `ALLOW_DESTRUCTIVE_TEST_DATABASE`, which must explicitly be `true` before integration cleanup
 - `READINESS_TIMEOUT_SECONDS`
 - `SOURCE_STORAGE_PATH` for host execution; Compose uses `/data/source-files`
+- `WATCH_INPUT_PATH` for the optional stable-file inbox; Compose uses `/data/watch-inbox`
+- `WATCH_POLL_SECONDS`, default `2`
+- `WATCH_STABLE_POLLS`, default `2`
 - `MAX_UPLOAD_BYTES`, default **10 MiB** and constrained to at most 100 MiB by settings
 - `MODEL_PROVIDER`, default `deterministic` (keyless). Set `openai` only with `OPENAI_API_KEY`
 - `OPENAI_MODEL`, `OPENAI_BASE_URL`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES`
@@ -155,10 +159,10 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.6.0`, current Phase 06 metadata, and a truthful statement that
-durable checkpoint/resume over grounded Understand, Examine, and the explicit human-review gate is
-implemented, while MCP business operations, watching, incremental updates, and register publication
-are not.
+Returns application version `0.7.0`, current Phase 07 metadata, and a truthful statement that
+focused incremental updates and stable-file inbox watching are implemented over grounded
+Understand, Examine, explicit human review, and durable resume, while MCP business operations and
+register publication are not.
 
 ### Phase 02 corpus and source API
 
@@ -329,6 +333,60 @@ REAL PROCESS TERMINATION → NEW PROCESS → SAME RUN → RESUME
 uv run pytest tests/test_process_kill_resume.py::test_real_process_kill_then_new_process_resumes_same_run
 ```
 
+### Phase 07 Incremental API
+
+- `POST /corpora/{corpus_id}/revisions` — create the first current `CorpusRevision` baseline
+- `GET /corpora/{corpus_id}/revisions/current`
+- `POST /corpora/{corpus_id}/incremental-runs` — detect SHA-256 source changes and run focused
+  Understand/Examine/review against the current baseline
+- `GET /corpora/{corpus_id}/incremental-runs/{run_id}`
+- `GET /corpora/{corpus_id}/incremental-runs/{run_id}/impact`
+- `GET /corpora/{corpus_id}/incremental-runs/{run_id}/evidence`
+- `POST /watcher/poll` — one stable-file inbox poll when `WATCH_INPUT_PATH` is set
+
+Every operation is corpus-scoped. Cross-corpus revision/run lookups return not found. Change
+identity is logical source plus SHA-256; timestamps are not used. Identical bytes for one logical
+source do not create a new `SourceVersion`. Changed bytes create a new immutable version and a new
+incremental analysis/examination/review set. The previous review session is left immutable. New
+review items start `pending`; prior approvals are never copied. A materially changed proposal
+requires fresh explicit review.
+
+If the supplied `baseline_revision_id` is not the current corpus revision, the run is persisted as
+`stale_baseline` and the API returns HTTP 409. Same-corpus incremental execution is serialized with
+`pg_advisory_lock(hashtext('incremental-corpus:{corpus_id}'))`. At most one run advances revision
+N to N+1. The losing run does not apply a mixed-base result.
+
+No-full-rerun proof is the durable evidence payload: classify **and** extract executed versus
+skipped source-version IDs with per-source-version disposition (`executed` / `reused` /
+`skipped`), reused versus recomputed fact/contradiction/rule IDs, completed durable
+operation rows for reuse claims, skipped keys when no ledger row exists (never fabricated as
+`reused`), canonical unchanged artifact hashes taken from persisted rows including review-item
+before/after bytes, and stages executed/skipped from actual control flow.
+Final-output equality alone is not accepted as proof. Canonical serialization is
+`incremental-artifact.v1`: sorted-key compact UTF-8 JSON excluding ids, run ids, timestamps,
+review session/item ids, and current decision state.
+
+The watcher polls `{WATCH_INPUT_PATH}/{corpus_id}/{logical_name}.{ext}`. A file is eligible only
+after `WATCH_STABLE_POLLS` consecutive polls with the same SHA-256 and size. Restart uses persisted
+`watcher_files` rows so completed unchanged bytes are not re-ingested, while pending incremental
+work is retried without creating a new SourceVersion.
+
+```powershell
+$baseline = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/corpora/$($corpus.id)/revisions" `
+  -ContentType "application/json" `
+  -Body (@{
+    analysis_run_id = $run.id
+    examination_run_id = $exam.id
+    review_session_id = $review.id
+  } | ConvertTo-Json)
+$incremental = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/corpora/$($corpus.id)/incremental-runs" `
+  -ContentType "application/json" `
+  -Body (@{ baseline_revision_id = $baseline.id } | ConvertTo-Json)
+Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/incremental-runs/$($incremental.id)/evidence"
+```
+
 ### Normalization and exact provenance
 
 Original bytes are written under generated version keys and treated as immutable by application
@@ -419,9 +477,11 @@ uv run alembic upgrade head
 
 $env:DATABASE_URL = $testDatabaseUrl
 uv run alembic upgrade head
-uv run alembic downgrade 20260819_0005
+uv run alembic downgrade 20260819_0006
 uv run alembic upgrade head
 uv run alembic current
+# Schema-only. Populated 0007 → 0006 with incremental DurableOperation rows is
+# `tests/test_incremental_migration.py` under pytest -m integration.
 
 $env:DATABASE_URL = $appDatabaseUrl
 $env:TEST_DATABASE_URL = $testDatabaseUrl
@@ -452,18 +512,20 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.6.0`,
-`Phase 06 — Durable Resume`, durable checkpoint/resume over grounded Understand/Examine plus the
-explicit human-review gate, and the absence of MCP, watching, and register publication. The
-frontend status shell includes a minimal review panel.
+All three services should report healthy. `/version` should report application version `0.7.0`,
+`Phase 07 — Incremental Updates`, focused incremental updates and stable-file inbox watching over
+grounded Understand/Examine plus explicit human review and durable resume, and the absence of MCP
+business operations and register publication. The frontend status shell includes a minimal review
+panel. Human Review UI remains primary.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pull requests to `main` and pushes to `main`.
 
-- Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Phase 06 test-database
-  round-trip `0005 → 0006 → 0005 → 0006`, Ruff format/lint, mypy, pytest with coverage (includes
-  real process-kill/resume), and package build.
+- Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Phase 07 test-database
+  schema round-trip `0006 → 0007 → 0006 → 0007`, Ruff format/lint, mypy, pytest with coverage
+  (includes populated `0007` downgrade with incremental ledger rows, process-kill/resume, and
+  incremental Aurora/Harbor proof), and package build.
 - Frontend: Node 22.20.0, `npm ci`, Prettier, ESLint, TypeScript, Vitest, and production build.
 
 No deployment workflow exists.
@@ -521,9 +583,9 @@ No deployment workflow exists.
   user-upload rule editor, generic expression engine, or register-publication step.
 - Human review is an explicit item-level gate over Examine findings. It does not publish a register
   version or provide MCP tools.
-- Durable resume is implemented for the workflow run. It does not publish approved items, watch a
-  filesystem inbox, or run a separate worker fleet. The API process executes the graph; the
-  subprocess worker exists for kill/resume proof.
+- Durable resume is implemented for the workflow run. It does not publish approved items or run a
+  separate worker fleet. The API process executes the graph; the subprocess worker exists for
+  kill/resume proof.
 - Local completed persistence (A): a ledger row `completed` with result hash/payload is reused and
   does not call the provider again.
 - Logical idempotency (B): one logical operation per canonical key; `logical_operation_count = 1`
@@ -542,11 +604,23 @@ No deployment workflow exists.
 - Failed-stage resume is a same-run/thread restart: under the session lock it deletes only that
   thread's LangGraph checkpoint rows and re-enters from durable business/ledger state. It is not
   in-place continuation of a failed LangGraph node.
-- MCP business operations, watching, incremental updates, and register publication remain
-  unimplemented.
+- Focused incremental updates are implemented over a durable corpus revision/baseline. They do not
+  publish a register version, auto-approve review items, or treat hash equality of final outputs as
+  proof that a full rerun was avoided. Source removal is recorded in the change-set planner when a
+  logical source disappears from the latest version set; the watcher marks temporarily missing inbox
+  files and does not delete Source/SourceVersion rows. A crash after incremental Understand/Examine/
+  review rows are written but before atomic revision finalization may leave non-current orphan
+  `AnalysisRun`, `ExaminationRun`, and `ReviewSession` rows. Those rows cannot become current
+  revision state, are not reused as the authoritative baseline, are not deleted automatically, and
+  cleanup/reconciliation is deferred. The incremental operation is therefore not globally
+  rollback-clean for those pre-finalization artifacts.
+- The watcher is stable-file polling of a mounted inbox. It is not inotify, watchdog, Kafka, or a
+  distributed worker. Eligibility is identical SHA-256 plus size across `WATCH_STABLE_POLLS`
+  polls, not filesystem mtime alone.
+- MCP business operations and register publication remain unimplemented.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–06 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–07 architecture and later-phase plans

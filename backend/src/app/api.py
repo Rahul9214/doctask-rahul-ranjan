@@ -3,7 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
 
+from app.errors import ConflictError, ValidationError
 from app.examine_service import ExamineService, stage_event_response
+from app.incremental_service import IncrementalService, json_object, json_object_list
 from app.parsers import SourceFormat
 from app.review_service import ReviewService, session_response
 from app.schemas import (
@@ -13,11 +15,17 @@ from app.schemas import (
     ContradictionResponse,
     CorpusCreate,
     CorpusResponse,
+    CorpusRevisionCreate,
+    CorpusRevisionResponse,
     ExaminationRunResponse,
     ExaminationStageEventResponse,
     ExaminationSummaryResponse,
     FactResponse,
     FindingResponse,
+    IncrementalEvidenceResponse,
+    IncrementalImpactResponse,
+    IncrementalRunCreate,
+    IncrementalRunResponse,
     IngestionResponse,
     ReviewDecisionCreate,
     ReviewDecisionResult,
@@ -32,11 +40,14 @@ from app.schemas import (
     SourceVersionResponse,
     StageEventResponse,
     UnderstandingResponse,
+    WatcherPollEventResponse,
+    WatcherPollResponse,
     WorkflowRunEventResponse,
     WorkflowRunResponse,
 )
 from app.services import Phase02Service
 from app.understand_service import UnderstandService
+from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -62,11 +73,28 @@ def get_workflow_service(request: Request) -> WorkflowService:
     return cast(WorkflowService, request.app.state.workflow_service)
 
 
+def get_incremental_service(request: Request) -> IncrementalService:
+    return cast(IncrementalService, request.app.state.incremental_service)
+
+
+def get_watcher_service(request: Request) -> WatcherService:
+    watcher = getattr(request.app.state, "watcher_service", None)
+    if watcher is None:
+        raise ValidationError(
+            "watcher_not_configured",
+            "No watch inbox is configured for this process.",
+            "Set WATCH_INPUT_PATH to a mounted inbox directory.",
+        )
+    return cast(WatcherService, watcher)
+
+
 Service = Annotated[Phase02Service, Depends(get_phase02_service)]
 Understand = Annotated[UnderstandService, Depends(get_understand_service)]
 Examine = Annotated[ExamineService, Depends(get_examine_service)]
 Review = Annotated[ReviewService, Depends(get_review_service)]
 Workflow = Annotated[WorkflowService, Depends(get_workflow_service)]
+Incremental = Annotated[IncrementalService, Depends(get_incremental_service)]
+Watcher = Annotated[WatcherService, Depends(get_watcher_service)]
 
 
 @router.post("/corpora", response_model=CorpusResponse, status_code=status.HTTP_201_CREATED)
@@ -416,3 +444,119 @@ async def list_workflow_run_events(
         WorkflowRunEventResponse.model_validate(event)
         for event in await workflow.list_events(corpus_id, run_id)
     ]
+
+
+@router.post(
+    "/corpora/{corpus_id}/revisions",
+    response_model=CorpusRevisionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_corpus_revision(
+    corpus_id: UUID,
+    payload: CorpusRevisionCreate,
+    incremental: Incremental,
+) -> CorpusRevisionResponse:
+    revision = await incremental.create_baseline_revision(
+        corpus_id,
+        analysis_run_id=payload.analysis_run_id,
+        examination_run_id=payload.examination_run_id,
+        review_session_id=payload.review_session_id,
+    )
+    return CorpusRevisionResponse.model_validate(revision)
+
+
+@router.get(
+    "/corpora/{corpus_id}/revisions/current",
+    response_model=CorpusRevisionResponse,
+)
+async def get_current_corpus_revision(
+    corpus_id: UUID, incremental: Incremental
+) -> CorpusRevisionResponse:
+    return CorpusRevisionResponse.model_validate(await incremental.get_current_revision(corpus_id))
+
+
+@router.post(
+    "/corpora/{corpus_id}/incremental-runs",
+    response_model=IncrementalRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_incremental_run(
+    corpus_id: UUID,
+    incremental: Incremental,
+    payload: IncrementalRunCreate | None = None,
+) -> IncrementalRunResponse:
+    body = payload or IncrementalRunCreate()
+    run = await incremental.create_run(
+        corpus_id,
+        baseline_revision_id=body.baseline_revision_id,
+    )
+    if run.status == "stale_baseline":
+        raise ConflictError(
+            "stale_baseline",
+            run.error_detail or "The supplied baseline is not the current corpus revision.",
+            run.error_action or "Reload the current corpus revision and retry.",
+        )
+    return IncrementalRunResponse.model_validate(run)
+
+
+@router.get(
+    "/corpora/{corpus_id}/incremental-runs/{run_id}",
+    response_model=IncrementalRunResponse,
+)
+async def get_incremental_run(
+    corpus_id: UUID, run_id: UUID, incremental: Incremental
+) -> IncrementalRunResponse:
+    return IncrementalRunResponse.model_validate(await incremental.get_run(corpus_id, run_id))
+
+
+@router.get(
+    "/corpora/{corpus_id}/incremental-runs/{run_id}/impact",
+    response_model=IncrementalImpactResponse,
+)
+async def get_incremental_impact(
+    corpus_id: UUID, run_id: UUID, incremental: Incremental
+) -> IncrementalImpactResponse:
+    return IncrementalImpactResponse(
+        run_id=run_id,
+        impact=await incremental.get_impact(corpus_id, run_id),
+    )
+
+
+@router.get(
+    "/corpora/{corpus_id}/incremental-runs/{run_id}/evidence",
+    response_model=IncrementalEvidenceResponse,
+)
+async def get_incremental_evidence(
+    corpus_id: UUID, run_id: UUID, incremental: Incremental
+) -> IncrementalEvidenceResponse:
+    payload = await incremental.get_evidence(corpus_id, run_id)
+    return IncrementalEvidenceResponse(
+        run_id=run_id,
+        status=str(payload["status"]),
+        change_kind=str(payload["change_kind"]),
+        evidence=json_object(payload["evidence"]),
+        measurement=json_object(payload["measurement"]),
+        artifacts=json_object_list(payload["artifacts"]),
+    )
+
+
+@router.post("/watcher/poll", response_model=WatcherPollResponse)
+async def poll_watcher(watcher: Watcher) -> WatcherPollResponse:
+    result = await watcher.poll_once()
+    return WatcherPollResponse(
+        examined=result.examined,
+        ingested=result.ingested,
+        unchanged=result.unchanged,
+        triggered=result.triggered,
+        failed=result.failed,
+        events=[
+            WatcherPollEventResponse(
+                relative_path=event.relative_path,
+                status=event.status,
+                content_sha256=event.content_sha256,
+                incremental_run_id=event.incremental_run_id,
+                error_code=event.error_code,
+            )
+            for event in result.events
+        ],
+    )

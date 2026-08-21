@@ -103,8 +103,9 @@ export default function App() {
         <p className="eyebrow">Human review</p>
         <h1 id="page-title">Project Assurance Register</h1>
         <p className="scope-message">
-          Understand, Examine, item-level human review, and durable resume are
-          implemented. Register publication, MCP, and watching are not.
+          Understand, Examine, item-level human review, durable resume, and
+          focused incremental updates are implemented. Register publication and
+          MCP are not.
         </p>
 
         <div className="status-card" aria-live="polite">

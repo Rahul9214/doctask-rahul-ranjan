@@ -1,5 +1,6 @@
 """Application service for corpus-scoped Examine runs."""
 
+from collections.abc import Sequence
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -9,7 +10,7 @@ from app.db import SessionFactory
 from app.errors import NotFoundError, ValidationError
 from app.examine_graph import ExamineWorkflow, utcnow
 from app.models import ExaminationRun, ExaminationStageEvent, Fact, Finding
-from app.ruleset import EXAMINE_GRAPH_VERSION, RULES, RULESET_VERSION
+from app.ruleset import EXAMINE_GRAPH_VERSION, RULES, RULESET_VERSION, UnderstandingView
 from app.schemas import (
     CitationRequest,
     ExaminationRunResponse,
@@ -32,6 +33,23 @@ class ExamineService:
         self.phase02 = phase02
         self.understand = understand
         self.workflow = ExamineWorkflow(session_factory=session_factory, phase02=phase02)
+
+    async def revalidate_finding_payloads(
+        self,
+        *,
+        corpus_id: UUID,
+        analysis_run_id: UUID,
+        findings: Sequence[dict[str, object]],
+        view: UnderstandingView,
+        classifications: Sequence[dict[str, object]] = (),
+    ) -> None:
+        await self.workflow.revalidate_finding_payloads(
+            corpus_id=corpus_id,
+            analysis_run_id=analysis_run_id,
+            findings=findings,
+            view=view,
+            classifications=classifications,
+        )
 
     async def create_run(self, corpus_id: UUID, analysis_run_id: UUID) -> ExaminationRun:
         await self.phase02.get_corpus(corpus_id)

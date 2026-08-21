@@ -10,6 +10,7 @@ from fastapi import UploadFile
 from starlette.datastructures import Headers
 
 from app.examine_service import ExamineService
+from app.incremental_service import IncrementalService
 from app.model_gateway import (
     BlockContext,
     ClassificationBatch,
@@ -24,6 +25,7 @@ from app.review_service import ReviewService
 from app.schemas import ReviewDecisionCreate
 from app.services import Phase02Service
 from app.understand_service import UnderstandService
+from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
 
 MEDIA_TYPES = {
@@ -105,6 +107,61 @@ def make_workflow(
         resolved,
         adapter or DeterministicModelAdapter(),
         database_url=database_url,
+    )
+
+
+def make_incremental(
+    phase02: Phase02Service,
+    adapter: ModelAdapter | None = None,
+    review: ReviewService | None = None,
+) -> IncrementalService:
+    resolved = review or make_review(phase02, adapter)
+    return IncrementalService(
+        phase02.session_factory,
+        phase02,
+        resolved.examine.understand,
+        resolved.examine,
+        resolved,
+        adapter or DeterministicModelAdapter(),
+    )
+
+
+async def prepare_incremental_corpus(
+    phase02: Phase02Service,
+    corpus_dir: Path,
+    adapter: ModelAdapter | None = None,
+) -> tuple[Corpus, IncrementalService]:
+    corpus = await ingest_corpus(phase02, corpus_dir)
+    incremental = make_incremental(phase02, adapter)
+    analysis = await incremental.understand.create_run(corpus.id)
+    examination = await incremental.examine.create_run(corpus.id, analysis.id)
+    session, _created = await incremental.review.create_session(corpus.id, examination.id)
+    await complete_required_review(incremental.review, corpus.id, session.id)
+    await incremental.create_baseline_revision(
+        corpus.id,
+        analysis_run_id=analysis.id,
+        examination_run_id=examination.id,
+        review_session_id=session.id,
+    )
+    return corpus, incremental
+
+
+def make_watcher(
+    phase02: Phase02Service,
+    inbox_path: Path,
+    *,
+    adapter: ModelAdapter | None = None,
+    incremental: IncrementalService | None = None,
+    stable_polls: int = 2,
+) -> WatcherService:
+    resolved = incremental or make_incremental(phase02, adapter)
+    return WatcherService(
+        phase02.session_factory,
+        phase02,
+        resolved,
+        inbox_path=inbox_path,
+        poll_seconds=0.01,
+        stable_polls=stable_polls,
     )
 
 
