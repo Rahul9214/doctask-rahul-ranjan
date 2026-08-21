@@ -427,3 +427,83 @@ class WorkflowRunEventResponse(BaseModel):
     payload: dict[str, object]
     duration_ms: int | None
     created_at: datetime
+
+
+class CorpusRevisionCreate(BaseModel):
+    analysis_run_id: UUID
+    examination_run_id: UUID
+    review_session_id: UUID | None = None
+
+
+class CorpusRevisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    revision_number: int
+    is_current: bool
+    analysis_run_id: UUID
+    examination_run_id: UUID
+    review_session_id: UUID | None
+    source_version_set: list[dict[str, object]]
+    taxonomy_version: str
+    understand_graph_version: str
+    prompt_config_version: str
+    ruleset_version: str
+    examine_graph_version: str
+    created_at: datetime
+
+
+class IncrementalRunCreate(BaseModel):
+    baseline_revision_id: UUID | None = None
+
+
+class IncrementalRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    corpus_id: UUID
+    baseline_revision_id: UUID
+    result_revision_id: UUID | None
+    analysis_run_id: UUID | None
+    examination_run_id: UUID | None
+    review_session_id: UUID | None
+    status: str
+    change_kind: str
+    error_code: str | None
+    error_detail: str | None
+    error_action: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class IncrementalImpactResponse(BaseModel):
+    run_id: UUID
+    impact: dict[str, object]
+
+
+class IncrementalEvidenceResponse(BaseModel):
+    run_id: UUID
+    status: str
+    change_kind: str
+    evidence: dict[str, object]
+    measurement: dict[str, object]
+    artifacts: list[dict[str, object]]
+
+
+class WatcherPollEventResponse(BaseModel):
+    relative_path: str
+    status: str
+    content_sha256: str | None
+    incremental_run_id: UUID | None
+    error_code: str | None
+
+
+class WatcherPollResponse(BaseModel):
+    examined: int
+    ingested: int
+    unchanged: int
+    triggered: int
+    failed: int
+    events: list[WatcherPollEventResponse]

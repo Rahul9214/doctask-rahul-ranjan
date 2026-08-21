@@ -20,10 +20,11 @@ extraction, contradiction detection, unknown/insufficient-evidence representatio
 analysis-run APIs, a versioned assurance ruleset, a LangGraph Examine workflow, inspectable
 examination-run APIs, explicit review sessions/items/decisions with row-level transactional locking
 and authoritative count recomputation, explicit edit acknowledgement, and a minimal review UI.
-Database-level mutation-prevention triggers or restricted roles are not implemented.
+Database-level mutation-prevention triggers or restricted roles are not implemented. Phase 06 adds
+durable workflow resume. Phase 07 adds focused incremental updates and stable-file inbox watching.
 
-MCP business server, watcher, durable workflow resume, incremental processing, register publication,
-and a full measurement system are not implemented yet.
+MCP business server, register publication, production deployment, and a full Behavior 10
+measurement/observability UI remain unimplemented.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -301,9 +302,9 @@ Understand, examine, and stay alive must each be genuinely represented. The curr
 - [x] surfaced contradictions with all sides cited;
 - [x] a clean, fully evaluated corpus returns an honest no-findings result;
 - [ ] changing a rule/domain configuration changes behavior without a code rewrite;
-- [ ] new content triggers focused incremental processing;
-- [ ] change history answers what changed, when, and because of which source;
-- [ ] incremental proof compares affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes; and
+- [x] new content triggers focused incremental processing;
+- [x] change history answers what changed, when, and because of which source;
+- [x] incremental proof compares affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes; and
 - [x] a second different corpus succeeds without corpus-specific code changes.
 
 A cut inside these movement details is allowed only with explicit rationale while preserving a genuine minimum of each movement.
@@ -387,11 +388,15 @@ Implement a simple watched inbox, source versioning, affected-item planning, foc
 
 Exit only when the evidence compares affected/preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes. Hash equality alone does not prove a full rerun was avoided.
 
-### Phase 08 — React review UI and MCP (2.25h)
+### Phase 08 — extra review surface and MCP (2.25h)
 
-Implement the essential stage timeline, provenance, review controls, status/resume view, and machine operations over shared services.
+Item-level React review (approve/reject/edit and complete) already exists from Phase 05.
+Remaining Phase 08 work is extra timeline/provenance/status/resume UI only if still required,
+MCP business operations over the same application services, and end-to-end machine operations
+through the existing review services. Do not rebuild the Phase 05 review panel.
 
-Exit only when UI supports real human mixed decisions and MCP/API supports explicit gate operations end to end.
+Exit only when MCP/API supports explicit gate operations end to end, and any remaining UI
+is limited to the extra observability surface above.
 
 ### Phase 09 — hardening, adversarial tests, and measurements (2.5h)
 
@@ -427,4 +432,8 @@ The non-cuttable Task 1 floor is done only when:
 
 ## Prioritized completion target
 
-Behaviors 6–10, second-corpus proof, graceful degradation scenarios, incremental breadth, and the full reproducibility/evidence suite remain planned. Each behavior 6–10 item is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Their omission must not be hidden inside the minimum Definition of Done.
+Behaviors 6–10, MCP business interface, register publication, graceful degradation scenarios, and
+the full reproducibility/evidence suite remain planned. Focused incremental watched updates are
+implemented in Phase 07. Each behavior 6–10 item is a **Strong differentiator — may be cut only with
+explicit rationale if time forces a trade-off.** Their omission must not be hidden inside the
+minimum Definition of Done.

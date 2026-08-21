@@ -29,15 +29,19 @@ services:
       context: ./backend
     environment:
       APP_NAME: Project Assurance Register
-      APP_VERSION: 0.6.0
-      CURRENT_PHASE: Phase 06 — Durable Resume
+      APP_VERSION: 0.7.0
+      CURRENT_PHASE: Phase 07 — Incremental Updates
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-project_assurance}:${POSTGRES_PASSWORD:-local_only}@db:5432/${POSTGRES_DB:-project_assurance}
       SOURCE_STORAGE_PATH: /data/source-files
+      WATCH_INPUT_PATH: /data/watch-inbox
+      WATCH_POLL_SECONDS: 2
+      WATCH_STABLE_POLLS: 2
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
       READINESS_TIMEOUT_SECONDS: 5
       MODEL_PROVIDER: deterministic
     volumes:
       - source_files:/data/source-files
+      - watch_inbox:/data/watch-inbox
     init: true
     depends_on:
       db:
@@ -76,3 +80,4 @@ services:
 volumes:
   postgres_data:
   source_files:
+  watch_inbox:

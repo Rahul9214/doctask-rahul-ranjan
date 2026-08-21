@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -67,6 +68,19 @@ class SourceVersion(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "corpus_id", name="uq_source_versions_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "source_id",
+            "corpus_id",
+            name="uq_source_versions_id_source_corpus",
+        ),
+        UniqueConstraint(
+            "id",
+            "source_id",
+            "corpus_id",
+            "sha256",
+            name="uq_source_versions_id_source_corpus_sha256",
+        ),
         UniqueConstraint("source_id", "sha256", name="uq_source_versions_source_sha256"),
         UniqueConstraint("storage_key", name="uq_source_versions_storage_key"),
         CheckConstraint(
@@ -921,6 +935,20 @@ class DurableOperation(Base):
         ),
         UniqueConstraint("operation_key", name="uq_durable_operations_operation_key"),
         UniqueConstraint("id", "corpus_id", name="uq_durable_operations_id_corpus"),
+        ForeignKeyConstraint(
+            ["incremental_run_id", "corpus_id"],
+            ["incremental_runs.id", "incremental_runs.corpus_id"],
+            name="fk_durable_operations_incremental_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "("
+            "workflow_run_id IS NOT NULL AND incremental_run_id IS NULL"
+            ") OR ("
+            "workflow_run_id IS NULL AND incremental_run_id IS NOT NULL"
+            ")",
+            name="ck_durable_operations_owner",
+        ),
         CheckConstraint(
             "status IN ('intended', 'in_flight', 'completed', 'failed', 'ambiguous')",
             name="ck_durable_operations_status",
@@ -964,11 +992,13 @@ class DurableOperation(Base):
         ),
         Index("ix_durable_operations_corpus_id", "corpus_id"),
         Index("ix_durable_operations_workflow_run_id", "workflow_run_id"),
+        Index("ix_durable_operations_incremental_run_id", "incremental_run_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     corpus_id: Mapped[UUID] = mapped_column(nullable=False)
-    workflow_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    workflow_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    incremental_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
     operation_key: Mapped[str] = mapped_column(String(64))
     operation_type: Mapped[str] = mapped_column(String(50))
     stage: Mapped[str] = mapped_column(String(40))
@@ -1017,5 +1047,288 @@ class WorkflowRunEvent(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CorpusRevision(Base):
+    __tablename__ = "corpus_revisions"
+    __table_args__ = (
+        UniqueConstraint("id", "corpus_id", name="uq_corpus_revisions_id_corpus"),
+        UniqueConstraint(
+            "corpus_id",
+            "revision_number",
+            name="uq_corpus_revisions_corpus_number",
+        ),
+        ForeignKeyConstraint(
+            ["analysis_run_id", "corpus_id"],
+            ["analysis_runs.id", "analysis_runs.corpus_id"],
+            name="fk_corpus_revisions_analysis_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id"],
+            ["examination_runs.id", "examination_runs.corpus_id"],
+            name="fk_corpus_revisions_examination_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_session_id", "corpus_id"],
+            ["review_sessions.id", "review_sessions.corpus_id"],
+            name="fk_corpus_revisions_review_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("revision_number >= 1", name="ck_corpus_revisions_number"),
+        Index("ix_corpus_revisions_corpus_id", "corpus_id"),
+        Index(
+            "uq_corpus_revisions_current",
+            "corpus_id",
+            unique=True,
+            postgresql_where=text("is_current IS TRUE"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=False
+    )
+    revision_number: Mapped[int] = mapped_column(Integer)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    examination_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    source_version_set: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    taxonomy_version: Mapped[str] = mapped_column(String(100))
+    understand_graph_version: Mapped[str] = mapped_column(String(100))
+    prompt_config_version: Mapped[str] = mapped_column(String(100))
+    ruleset_version: Mapped[str] = mapped_column(String(100))
+    examine_graph_version: Mapped[str] = mapped_column(String(100))
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CorpusRevisionSource(Base):
+    __tablename__ = "corpus_revision_sources"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["revision_id", "corpus_id"],
+            ["corpus_revisions.id", "corpus_revisions.corpus_id"],
+            name="fk_corpus_revision_sources_revision_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_id", "corpus_id"],
+            ["sources.id", "sources.corpus_id"],
+            name="fk_corpus_revision_sources_source_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_version_id", "source_id", "corpus_id", "sha256"],
+            [
+                "source_versions.id",
+                "source_versions.source_id",
+                "source_versions.corpus_id",
+                "source_versions.sha256",
+            ],
+            name="fk_corpus_revision_sources_version_source_corpus_sha256",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "revision_id",
+            "source_version_id",
+            name="uq_corpus_revision_sources_revision_version",
+        ),
+        CheckConstraint(
+            "char_length(btrim(sha256)) = 64",
+            name="ck_corpus_revision_sources_sha256",
+        ),
+        Index("ix_corpus_revision_sources_corpus_id", "corpus_id"),
+    )
+
+    revision_id: Mapped[UUID] = mapped_column(primary_key=True)
+    source_id: Mapped[UUID] = mapped_column(primary_key=True)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_version_id: Mapped[UUID] = mapped_column(nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64))
+    logical_name: Mapped[str] = mapped_column(String(255))
+
+
+class IncrementalRun(Base):
+    __tablename__ = "incremental_runs"
+    __table_args__ = (
+        UniqueConstraint("id", "corpus_id", name="uq_incremental_runs_id_corpus"),
+        ForeignKeyConstraint(
+            ["baseline_revision_id", "corpus_id"],
+            ["corpus_revisions.id", "corpus_revisions.corpus_id"],
+            name="fk_incremental_runs_baseline_revision_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["result_revision_id", "corpus_id"],
+            ["corpus_revisions.id", "corpus_revisions.corpus_id"],
+            name="fk_incremental_runs_result_revision_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["analysis_run_id", "corpus_id"],
+            ["analysis_runs.id", "analysis_runs.corpus_id"],
+            name="fk_incremental_runs_analysis_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id"],
+            ["examination_runs.id", "examination_runs.corpus_id"],
+            name="fk_incremental_runs_examination_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["review_session_id", "corpus_id"],
+            ["review_sessions.id", "review_sessions.corpus_id"],
+            name="fk_incremental_runs_review_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'failed', 'stale_baseline')",
+            name="ck_incremental_runs_status",
+        ),
+        CheckConstraint(
+            "change_kind IN ("
+            "'unchanged', 'changed', 'added', 'removed', 'mixed', 'stale_baseline'"
+            ")",
+            name="ck_incremental_runs_change_kind",
+        ),
+        CheckConstraint(
+            "(status = 'completed' AND completed_at IS NOT NULL) OR "
+            "(status <> 'completed' AND completed_at IS NULL)",
+            name="ck_incremental_runs_completion_timestamp",
+        ),
+        Index("ix_incremental_runs_corpus_id", "corpus_id"),
+        Index("ix_incremental_runs_baseline_revision_id", "baseline_revision_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=False
+    )
+    baseline_revision_id: Mapped[UUID] = mapped_column(nullable=False)
+    result_revision_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    analysis_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    examination_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    review_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    change_kind: Mapped[str] = mapped_column(String(40), default="unchanged")
+    impact: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    measurement: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncrementalArtifactEvidence(Base):
+    __tablename__ = "incremental_artifact_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "corpus_id",
+            name="uq_incremental_artifact_evidence_id_corpus",
+        ),
+        ForeignKeyConstraint(
+            ["incremental_run_id", "corpus_id"],
+            ["incremental_runs.id", "incremental_runs.corpus_id"],
+            name="fk_incremental_artifact_evidence_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["durable_operation_id", "corpus_id"],
+            ["durable_operations.id", "durable_operations.corpus_id"],
+            name="fk_incremental_artifact_evidence_operation_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "artifact_kind IN ("
+            "'fact', 'contradiction', 'finding', 'review_item', 'operation', "
+            "'stage', 'source_version', 'source_block', 'rule'"
+            ")",
+            name="ck_incremental_artifact_kind",
+        ),
+        CheckConstraint(
+            "disposition IN ("
+            "'reused', 'recomputed', 'added', 'removed', 'executed', "
+            "'skipped', 'unchanged', 'obsolete'"
+            ")",
+            name="ck_incremental_artifact_disposition",
+        ),
+        Index("ix_incremental_artifact_evidence_corpus_id", "corpus_id"),
+        Index("ix_incremental_artifact_evidence_run_id", "incremental_run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    incremental_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    durable_operation_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    artifact_kind: Mapped[str] = mapped_column(String(40))
+    artifact_id: Mapped[str] = mapped_column(String(100))
+    disposition: Mapped[str] = mapped_column(String(30))
+    canonical_hash_before: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    canonical_hash_after: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WatcherFile(Base):
+    __tablename__ = "watcher_files"
+    __table_args__ = (
+        UniqueConstraint("inbox_root", "relative_path", name="uq_watcher_files_root_path"),
+        ForeignKeyConstraint(
+            ["last_incremental_run_id", "corpus_id"],
+            ["incremental_runs.id", "incremental_runs.corpus_id"],
+            name="fk_watcher_files_incremental_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("byte_size >= 0", name="ck_watcher_files_byte_size"),
+        CheckConstraint("stable_poll_count >= 0", name="ck_watcher_files_stable_polls"),
+        CheckConstraint(
+            "status IN ("
+            "'observing', 'stable', 'ingested_incremental_pending', "
+            "'processing_incremental', 'completed', 'failed_retryable', "
+            "'failed_terminal', 'unchanged', 'missing'"
+            ")",
+            name="ck_watcher_files_status",
+        ),
+        Index("ix_watcher_files_corpus_id", "corpus_id"),
+        Index("ix_watcher_files_content_sha256", "corpus_id", "content_sha256"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    inbox_root: Mapped[str] = mapped_column(String(500))
+    relative_path: Mapped[str] = mapped_column(String(500))
+    corpus_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=True
+    )
+    logical_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    declared_format: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    byte_size: Mapped[int] = mapped_column(BigInteger, default=0)
+    stable_poll_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="observing")
+    last_incremental_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

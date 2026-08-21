@@ -2,19 +2,25 @@
 
 ## Current state
 
-- **Current phase:** Phase 06 — Durable Resume — initial local PASS; independent verification
-  FAIL / NO-GO; first correction implemented locally; independent re-verification NO-GO; second
-  live-retry correction implemented locally; retry-allowlist re-verification NO-GO; exclusive
-  retry-allowlist correction implemented locally and not independently re-verified
+- **Current phase:** Phase 07 — Incremental Updates — original independent verification FAIL /
+  NO-GO retained; first correction then first re-verification NO-GO; local final correction
+  PASS then independent re-verification NO-GO (unsafe populated `0007` downgrade); local
+  `0007` downgrade correction PASS then mixed-ownership test proof was vacuous; local mixed-ownership
+  regression test correction PASS. Do not mark independent PASS. Phase 06 historical independent FAIL / NO-GO and exclusive retry-allowlist correction
+  remain below.
 - **Implementation status:** grounded Understand is committed on `main`. Grounded Examine and
   Phase 05 human review remain historically independently FAIL / NO-GO; those corrections were
   implemented locally and are on the ancestry of this branch. Phase 06 durable resume had an
   initial local PASS on `feat/phase-06-durable-resume`, then independent verification FAIL /
-  NO-GO. A first correction pass was implemented locally; independent re-verification of that
-  correction was NO-GO. A second live-retry correction was implemented locally; independent
-  re-verification was NO-GO because malformed HTTP 200 output was still auto-retried via a
-  generic `retryable=True` flag. An exclusive retry-allowlist correction is implemented locally.
-  Independent re-verification of that correction is not complete.
+  NO-GO; exclusive retry-allowlist correction is implemented locally and is not independently
+  re-verified. Phase 07 focused incremental updates and stable-file watching are implemented
+  locally on `feat/phase-07-incremental-updates`. Independent Phase 07 verification was FAIL /
+  NO-GO; a first correction pass followed; independent re-verification remained NO-GO. This record
+  is a local final correction pass (local PASS). Independent re-verification of that pass was
+  NO-GO on populated `0007` downgrade. A local downgrade-order correction followed; migration
+  implementation passed inspection, but the mixed-ownership regression proof was vacuous. A local
+  mixed-ownership test correction follows. Independent re-verification of that correction is
+  not complete.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
   deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
@@ -23,8 +29,10 @@
   (load/select/evaluate/validate/summarize/finalize), inspectable examination-run APIs,
   explicit review sessions/items/decisions, a minimal React review panel, durable workflow runs with
   PostgreSQL LangGraph checkpoints, a session-level same-run execution lock, an expensive-operation
-  ledger, real process-kill resume, same-corpus run isolation, local Compose stack, tests, and CI
-  definition
+  ledger, real process-kill resume, same-corpus run isolation, focused incremental corpus revisions,
+  provenance impact analysis, canonical unchanged-byte proof, executed-versus-reused operation
+  evidence, conservative fresh review, stale-baseline concurrency, stable-file inbox watching,
+  local Compose stack, tests, and CI definition
 - **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
   httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter;
   psycopg[binary] 3.3.4 is a main backend dependency for LangGraph PostgreSQL checkpointing
@@ -50,6 +58,11 @@
   implemented locally; independent re-verification NO-GO; second live-retry correction implemented
   locally; retry-allowlist re-verification NO-GO; exclusive retry-allowlist correction implemented
   locally; independent re-verification of that correction is not complete
+- **Phase 07 status:** original independent verification FAIL / NO-GO retained; first correction
+  implemented locally; first independent re-verification NO-GO; local final correction PASS;
+  independent re-verification of that pass NO-GO (populated `0007` downgrade); local downgrade
+  correction PASS; mixed-ownership downgrade regression proof was vacuous; local mixed-ownership
+  test correction PASS on `feat/phase-07-incremental-updates`. Do not mark independent PASS.
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record â€” 2026-08-18
@@ -2033,5 +2046,234 @@ Process-kill and Docker proofs were not rerun; this change does not touch workfl
 logic.
 
 Independent re-verification of this exclusive retry-allowlist correction is not complete. Do
-not mark independent PASS. Do not begin Phase 07 without separate explicit authorization.
+not mark independent PASS. Candidate owns Git writes.
+
+## Phase 07 record — 2026-08-20
+
+### Scope completed
+
+Implemented focused incremental updates and the minimum stable-file watcher. No MCP, no register
+publication, no Phase 08 UI/MCP work, no deployment/final submission work.
+
+- Alembic `20260819_0007` after committed `20260819_0006`: `corpus_revisions`, `incremental_runs`,
+  `incremental_artifact_evidence`, `watcher_files`
+- Change identity: logical source + SHA-256; new immutable SourceVersion on changed bytes
+- Impact from Phase 03/04 provenance citations, not vector similarity
+- Incremental Understand/Examine reuse unaffected artifacts; classify/extract only changed sources
+- Canonical serialization `incremental-artifact.v1`; unchanged hashes identical before/after reuse
+- Durable executed-versus-reused operation/source-version evidence; final-output equality is not
+  accepted as no-full-rerun proof
+- New review session; prior session immutable; no implicit approval; changed evidence requires
+  fresh review
+- Same-corpus `pg_advisory_lock`; stale explicit baseline persists `stale_baseline` / HTTP 409
+- Watcher: `{WATCH_INPUT_PATH}/{corpus_id}/{logical_name}.{ext}`, hash+size stability, restart
+  suppression, malformed/empty/oversized/missing handling
+- Application version `0.7.0`, phase `Phase 07 — Incremental Updates`
+
+### Cursor implementation verification — exact commands and final results
+
+Inspection: `feat/phase-07-incremental-updates`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`
+(Compose db only during pytest):
+
+- `uv sync --frozen --all-groups` — PASS
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 64 source files
+- dedicated test-database Alembic `0006 → 0007 → 0006 → 0007`,
+  `current = 20260819_0007 (head)` — PASS
+- `uv run pytest -m integration` — PASS; 73 passed, 97 deselected in 322.18s
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 170 passed, **91.28%** (gate 90%).
+  After that run, watcher malformed/empty/missing tests were added. Isolated
+  `tests/test_watcher.py` later PASS (2 passed). One earlier isolated watcher run hit host
+  `MemoryError` during SHA-256 of stored bytes; the same test passed on retry.
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.7.0`
+
+Frontend from `frontend/`:
+
+- `npm ci` — PASS
+- `npm run format:check` — PASS after Prettier rewrite of `src/App.tsx`
+- `npm run lint` — PASS
+- `npm run typecheck` — PASS
+- `npm test` — PASS; 2 files, 7 tests
+- `npm run build` — PASS
+
+Docker:
+
+- `docker compose config` — PASS; `APP_VERSION=0.7.0`, watch inbox volume `/data/watch-inbox`
+- `docker compose build backend` — PASS
+- `docker compose up --build --detach` — PASS; db/backend/frontend healthy
+- `/health` alive, `/ready` ready with pgvector 0.8.1, `/version` 0.7.0 Phase 07 — PASS
+- container `alembic current` = `20260819_0007 (head)` — PASS
+- frontend `http://localhost:5173/` and `/api/ready` HTTP 200 — PASS
+- Docker HTTP Aurora baseline + one-source Decision Log change + incremental run
+  `c54d27d4-08f8-4473-8d67-9f39b748f5d3`: `full_rerun=false`, stale baseline HTTP 409 — PASS
+
+Harbor incremental, watcher polling, and PostgreSQL stale-baseline concurrency were proven by
+pytest, not repeated as a second Docker HTTP corpus.
+
+Independent re-verification is not complete. Do not mark independent PASS. Do not begin Phase 08.
 Candidate owns Git writes.
+
+## Independent Phase 07 verification — FAIL / NO-GO
+
+Independent Phase 07 verification: **FAIL / NO-GO**
+
+Critical areas found:
+
+- post-extraction impact gap
+- Phase 04 validation bypass
+- synthetic/non-ledger operation proof
+- incomplete canonical proof
+- watcher lost-update window
+- non-atomic revision finalization
+
+This FAIL / NO-GO record is retained. Later local corrections do not replace it.
+
+## Phase 07 first correction — local
+
+First correction addressed the FAIL areas above: post-extraction impact replanning, Phase 04
+revalidation on incremental Examine, ledger-backed classify/extract for changed sources, skipped
+(not fabricated reused) unchanged classify keys, persisted-row canonical proof for facts/
+contradictions/findings, atomic revision finalization, watcher pending-incremental recovery, and
+`corpus_revision_sources` membership.
+
+## Independent Phase 07 first re-verification — NO-GO
+
+Independent re-verification of that first correction: **NO-GO**
+
+Remaining blockers:
+
+- unchanged extract suppression not durably evidenced per source version
+- reused review items lacked persisted canonical before/after byte proof
+- `corpus_revision_sources` did not DB-enforce source_version belongs to source and SHA equality
+- Aurora contradiction behavior asserted mainly by counts
+- Harbor second-run assertions incomplete (facts/rules/contradictions/classify+extract)
+- persisted reused contradiction/finding canonical byte equality not tested
+- orphan pre-finalization AnalysisRun/ExaminationRun/ReviewSession rows not documented
+- original independent Phase 07 FAIL / NO-GO not explicitly preserved in PROGRESS
+
+## Phase 07 local final correction
+
+Local final correction for the remaining re-verification blockers. Local status: **PASS**.
+Do not mark independent PASS. Do not begin Phase 08. Candidate owns Git writes.
+
+Inspection: `feat/phase-07-incremental-updates`; agent Git write operations: none.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- focused `uv run pytest tests/test_incremental_unit.py tests/test_incremental_integration.py tests/test_watcher.py` — PASS; 18 passed (8 unit + 7 integration + 3 watcher)
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 64 source files
+- `uv run pytest -m integration` — PASS; 78 passed, 100 deselected in 170.57s
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 178 passed, **92.08%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.7.0`
+- dedicated test-database Alembic `0006 → 0007 → 0006 → 0007`,
+  `current = 20260819_0007 (head)` — PASS
+
+Frontend: no shared-contract or UI changes in this pass; regression not re-run.
+
+Docker after backend PASS:
+
+- `docker compose build backend` and recreate healthy backend — PASS
+- container `alembic` after clearing leftover incremental ledger rows with null `workflow_run_id`,
+  then `0006 → 0007`, `current = 20260819_0007 (head)` — PASS
+- HTTP `/version` 0.7.0 Phase 07, `/ready` — PASS
+- HTTP Aurora incremental: `full_rerun=false`, unchanged classify **and** extract skipped,
+  changed classify+extract executed, reused review items with `canonical_bytes_equal=true` — PASS
+- HTTP Harbor incremental + classify/extract skip, no Aurora names required — PASS
+- HTTP stale baseline 409 — PASS
+- HTTP cross-corpus incremental lookup 404 — PASS
+- HTTP `POST /watcher/poll` — PASS
+- Watcher pending-incremental recovery without a new SourceVersion remains pytest-proven
+  (`test_watcher_retries_incremental_after_ingest_without_new_version`)
+
+Independent re-verification is not complete. Do not mark independent PASS. Do not begin Phase 08.
+
+## Independent Phase 07 re-verification of local final correction — NO-GO
+
+Independent re-verification of the local final correction: **NO-GO** / **PHASE 07 COMMIT VERDICT: NO-GO**
+
+Previous blockers (classify/extract suppression, canonical proof, revision membership, Aurora,
+Harbor, documentation/history) were resolved. New blocker:
+
+- `20260819_0007` downgrade dropped `incremental_run_id` and restored `workflow_run_id` NOT NULL
+  before removing incremental ledger rows. Incremental `DurableOperation` rows have
+  `workflow_run_id = NULL`, so a populated `0007` database could not downgrade without manual
+  deletion. Schema-only `0006 → 0007 → 0006 → 0007` did not prove downgrade safety with normal
+  Phase 07 data. The local Docker record itself reported clearing those rows first.
+
+This NO-GO record is retained. Later local corrections do not replace it.
+
+## Phase 07 0007 downgrade correction — local
+
+Local correction of the populated-downgrade defect. Local status: **PASS**.
+Do not mark independent PASS. Do not begin Phase 08. Candidate owns Git writes.
+
+Inspection: `feat/phase-07-incremental-updates`; agent Git write operations: none.
+
+Downgrade now drops watcher/evidence tables, deletes incremental-owned `durable_operations`
+(`incremental_run_id IS NOT NULL` or `workflow_run_id IS NULL`), then restores
+`workflow_run_id` NOT NULL. Workflow-owned ledger rows remain. Phase 07 revision/run/evidence
+data is discarded by that downgrade.
+
+Backend from `backend/` with `DATABASE_URL=.../project_assurance`,
+`TEST_DATABASE_URL=.../project_assurance_test`, `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`:
+
+- `uv run pytest tests/test_incremental_migration.py` — PASS; Harbor incremental ledger rows
+  present, `0007 → 0006` without manual deletion, remaining `durable_operations.workflow_run_id`
+  NOT NULL, `incremental_runs` gone, restore `0007` head
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 65 source files
+- `uv run pytest -m integration` — PASS; 79 passed, 100 deselected
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 179 passed, **92.11%** (gate 90%)
+- `uv build` — PASS; sdist and wheel for `project_assurance_register-0.7.0`
+- dedicated test-database schema round-trip `0006 → 0007 → 0006 → 0007`,
+  `current = 20260819_0007 (head)` — PASS (schema-only; populated proof is the pytest above)
+
+Frontend: no UI/contract change in this pass; not re-run.
+
+Docker after backend PASS, **without** manually deleting incremental ledger rows:
+
+- Before downgrade: 4 workflow-owned and 4 incremental-owned `durable_operations`, 3 incremental runs
+- `docker compose build backend` and recreate — PASS
+- `alembic downgrade 20260819_0006` — PASS; 4 remaining ops, 0 null `workflow_run_id`,
+  `workflow_run_id` `is_nullable=NO`, `incremental_runs` absent
+- `alembic upgrade 20260819_0007`, `current = 20260819_0007 (head)` — PASS
+
+Independent re-verification of this correction is not complete. Do not mark independent PASS.
+Do not begin Phase 08.
+
+## Phase 07 mixed-ownership downgrade test correction — local
+
+Migration `0007` downgrade-order implementation passed inspection. Remaining blocker: the
+populated round-trip test was vacuous for Phase 06 preservation because `workflow_owned_ids`
+was never asserted non-empty, so `remaining_ids == workflow_owned_ids` could pass with both
+sets empty.
+
+Corrected `tests/test_incremental_migration.py`: real Phase 06 `WorkflowService.create_run`
+(Aurora, waiting_for_review, no auto-completed review) plus real Phase 07 Harbor incremental
+run; both ownership classes asserted non-empty with exclusive `workflow_run_id` /
+`incremental_run_id` shapes; exact IDs compared after `0007 → 0006` with no manual cleanup;
+workflow rows and Phase 06 tables survive; incremental IDs and Phase 07 tables disappear;
+upgrade returns `20260819_0007 (head)` with the same workflow-owned rows valid.
+
+Verification:
+
+- `uv run pytest tests/test_incremental_migration.py -v` — PASS
+- `uv run ruff format --check .` — PASS
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 65 source files
+- `uv run pytest -m integration` — PASS; 79 passed, 100 deselected
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 179 passed, **92.06%** (gate 90%)
+- dedicated test-database schema round-trip `0006 → 0007 → 0006 → 0007`,
+  `current = 20260819_0007 (head)` — PASS
+- Docker not re-run; populated Docker downgrade already passed and this test did not expose a
+  migration defect
+
+Do not mark independent PASS. Do not begin Phase 08.

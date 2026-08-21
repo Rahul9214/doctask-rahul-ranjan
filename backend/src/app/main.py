@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from functools import partial
 
 from fastapi import FastAPI, Request
@@ -17,14 +18,16 @@ from app.db import (
     create_engine,
     create_session_factory,
 )
-from app.errors import ModelError, NotFoundError, Phase02Error, ValidationError
+from app.errors import ConflictError, ModelError, NotFoundError, Phase02Error, ValidationError
 from app.examine_service import ExamineService
+from app.incremental_service import IncrementalService
 from app.model_gateway import ModelAdapter, create_model_adapter
 from app.request_limits import UploadRequestSizeGuard
 from app.review_service import ReviewService
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 from app.understand_service import UnderstandService
+from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
 
 configure_windows_psycopg_loop()
@@ -49,6 +52,8 @@ def create_app(
     examine_service: ExamineService | None = None,
     review_service: ReviewService | None = None,
     workflow_service: WorkflowService | None = None,
+    incremental_service: IncrementalService | None = None,
+    watcher_service: WatcherService | None = None,
     model_adapter: ModelAdapter | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
@@ -99,16 +104,44 @@ def create_app(
             adapter,
             app_settings,
         )
+        resolved_incremental = incremental_service or IncrementalService(
+            resolved_phase02.session_factory,
+            resolved_phase02,
+            resolved_understand,
+            resolved_examine,
+            application.state.review_service,
+            adapter,
+            app_settings,
+        )
+        application.state.incremental_service = resolved_incremental
+        resolved_watcher = watcher_service
+        if resolved_watcher is None:
+            resolved_watcher = WatcherService.from_settings(
+                resolved_phase02.session_factory,
+                resolved_phase02,
+                resolved_incremental,
+                app_settings,
+            )
+        application.state.watcher_service = resolved_watcher
+        stop = asyncio.Event()
+        poll_task: asyncio.Task[None] | None = None
+        if resolved_watcher is not None:
+            poll_task = asyncio.create_task(resolved_watcher.run_forever(stop))
         yield
+        stop.set()
+        if poll_task is not None:
+            poll_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await poll_task
         await engine.dispose()
 
     application = FastAPI(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 06 durable checkpoint/resume over grounded Understand, Examine, "
-            "and the explicit human-review gate. MCP business operations, watching, "
-            "and register publication are not implemented."
+            "Phase 07 focused incremental updates and stable-file inbox watching over "
+            "grounded Understand, Examine, explicit human review, and durable resume. "
+            "MCP business operations and register publication are not implemented."
         ),
         lifespan=lifespan,
     )
@@ -122,6 +155,8 @@ def create_app(
         status_code = 422
         if isinstance(error, NotFoundError):
             status_code = 404
+        elif isinstance(error, ConflictError):
+            status_code = 409
         elif isinstance(error, ValidationError):
             status_code = 413 if error.code == "upload_too_large" else 400
         elif isinstance(error, ModelError):

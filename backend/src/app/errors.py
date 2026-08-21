@@ -28,6 +28,10 @@ class ValidationError(Phase02Error):
     pass
 
 
+class ConflictError(Phase02Error):
+    pass
+
+
 class StorageError(Phase02Error):
     pass
 

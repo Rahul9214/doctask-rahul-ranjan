@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,17 +17,16 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.6.0"
-    current_phase: str = "Phase 06 — Durable Resume"
+    app_version: str = "0.7.0"
+    current_phase: str = "Phase 07 — Incremental Updates"
     implementation_status: str = (
-        "Durable checkpoint/resume over grounded Understand, Examine, and the explicit "
-        "human-review gate is implemented: PostgreSQL LangGraph checkpoints, a session-level "
-        "advisory lock spanning graph execution, an operation ledger for costly calls, "
-        "process-kill recovery, and same-corpus run isolation. Automatic live retries are "
-        "exclusive to ConnectTimeout, PoolTimeout, ConnectError, HTTP 429, and HTTP 503. "
-        "Malformed HTTP 200 output and uncertain timeouts or post-send transport failures "
-        "are not retried automatically. MCP business operations, watching, incremental "
-        "updates, and register publication are not implemented."
+        "Focused incremental updates and stable-file inbox watching are implemented over "
+        "grounded Understand, Examine, explicit human review, and durable resume: SHA-256 "
+        "source-version change detection, provenance impact analysis, reuse of unaffected "
+        "artifacts with canonical unchanged-byte proof, executed-versus-reused operation "
+        "evidence, conservative fresh review for changed evidence, and stale-baseline "
+        "concurrency control. MCP business operations and register publication are not "
+        "implemented."
     )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
@@ -41,6 +40,16 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     model_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     model_max_retries: int = Field(default=2, ge=0, le=5)
+    watch_input_path: Path | None = None
+    watch_poll_seconds: float = Field(default=2.0, gt=0, le=60)
+    watch_stable_polls: int = Field(default=2, ge=2, le=10)
+
+    @field_validator("watch_input_path", mode="before")
+    @classmethod
+    def empty_watch_path(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
     def sqlalchemy_database_url(self) -> str:
         return self.database_url.get_secret_value()

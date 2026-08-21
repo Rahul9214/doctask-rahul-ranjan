@@ -146,6 +146,100 @@ class OperationLedger:
             prompt_config_version=prompt_config_version,
             workflow_graph_version=workflow_graph_version,
         )
+        result, _row, _reused = await self._execute_locked(
+            corpus_id=corpus_id,
+            workflow_run_id=workflow_run_id,
+            incremental_run_id=None,
+            operation_key=operation_key,
+            operation_type=operation_type,
+            stage=stage,
+            source_input_version=source_input_version,
+            request_hash=request_hash,
+            model_provider=model_provider,
+            model_name=model_name,
+            fn=fn,
+            dump=dump,
+            restore=restore,
+            reconcile_ambiguous=reconcile_ambiguous,
+        )
+        return result
+
+    async def execute_content(
+        self,
+        *,
+        corpus_id: UUID,
+        incremental_run_id: UUID,
+        stage: str,
+        operation_type: str,
+        source_input_version: str,
+        request: object,
+        model_provider: str,
+        model_name: str,
+        taxonomy_version: str,
+        understand_graph_version: str,
+        prompt_config_version: str,
+        fn: Callable[[], Awaitable[T]],
+        dump: Callable[[T], dict[str, object]],
+        restore: Callable[[dict[str, object]], T],
+        reconcile_ambiguous: bool,
+    ) -> tuple[T, DurableOperation, bool]:
+        request_hash = sha256_hex(canonical_json(request))
+        operation_key = make_content_operation_key(
+            corpus_id=corpus_id,
+            stage=stage,
+            operation_type=operation_type,
+            source_input_version=source_input_version,
+            request_hash=request_hash,
+            model_provider=model_provider,
+            model_name=model_name,
+            taxonomy_version=taxonomy_version,
+            understand_graph_version=understand_graph_version,
+            prompt_config_version=prompt_config_version,
+        )
+        return await self._execute_locked(
+            corpus_id=corpus_id,
+            workflow_run_id=None,
+            incremental_run_id=incremental_run_id,
+            operation_key=operation_key,
+            operation_type=operation_type,
+            stage=stage,
+            source_input_version=source_input_version,
+            request_hash=request_hash,
+            model_provider=model_provider,
+            model_name=model_name,
+            fn=fn,
+            dump=dump,
+            restore=restore,
+            reconcile_ambiguous=reconcile_ambiguous,
+        )
+
+    async def get_completed(self, operation_key: str) -> DurableOperation | None:
+        async with self.session_factory() as session:
+            row = await session.scalar(
+                select(DurableOperation).where(DurableOperation.operation_key == operation_key)
+            )
+        if row is None or row.status != "completed":
+            return None
+        return row
+
+    async def _execute_locked(
+        self,
+        *,
+        corpus_id: UUID,
+        workflow_run_id: UUID | None,
+        incremental_run_id: UUID | None,
+        operation_key: str,
+        operation_type: str,
+        stage: str,
+        source_input_version: str,
+        request_hash: str,
+        model_provider: str,
+        model_name: str,
+        fn: Callable[[], Awaitable[T]],
+        dump: Callable[[T], dict[str, object]],
+        restore: Callable[[dict[str, object]], T],
+        reconcile_ambiguous: bool,
+    ) -> tuple[T, DurableOperation, bool]:
         lock_key = f"durable-op:{operation_key}"
         async with self._engine().connect() as lock_conn:
             locked = await lock_conn.execution_options(isolation_level="AUTOCOMMIT")
@@ -161,7 +255,7 @@ class OperationLedger:
                         )
                     )
                     if existing is not None and existing.status == "completed":
-                        return restore(existing.result_payload)
+                        return restore(existing.result_payload), existing, True
                     if existing is not None and existing.status in _AMBIGUOUS_STATUSES:
                         if existing.status == "in_flight":
                             existing.status = "ambiguous"
@@ -183,6 +277,7 @@ class OperationLedger:
                         existing = DurableOperation(
                             corpus_id=corpus_id,
                             workflow_run_id=workflow_run_id,
+                            incremental_run_id=incremental_run_id,
                             operation_key=operation_key,
                             operation_type=operation_type,
                             stage=stage,
@@ -244,7 +339,7 @@ class OperationLedger:
                     row.updated_at = utcnow()
                     row.completed_at = utcnow()
                     await session.commit()
-                    return result
+                    return result, row, False
             finally:
                 await locked.execute(
                     text("SELECT pg_advisory_unlock(hashtext(:key))"),
@@ -342,3 +437,130 @@ def default_identity_versions() -> dict[str, str]:
         "prompt_config_version": PROMPT_CONFIG_VERSION,
         "workflow_graph_version": WORKFLOW_GRAPH_VERSION,
     }
+
+
+def content_operation_identity_payload(
+    *,
+    corpus_id: UUID,
+    stage: str,
+    operation_type: str,
+    source_input_version: str,
+    request_hash: str,
+    model_provider: str,
+    model_name: str,
+    taxonomy_version: str,
+    understand_graph_version: str,
+    prompt_config_version: str,
+) -> dict[str, str]:
+    """Run-independent identity for proving unchanged source operations were skipped.
+
+    Timestamps, incremental-run IDs, and workflow-run IDs are excluded so the same
+    unchanged source input yields the same key before and after an incremental run.
+    """
+
+    return {
+        "corpus_id": str(corpus_id),
+        "model_name": model_name,
+        "model_provider": model_provider,
+        "operation_type": operation_type,
+        "prompt_config_version": prompt_config_version,
+        "request_hash": request_hash,
+        "source_input_version": source_input_version,
+        "stage": stage,
+        "taxonomy_version": taxonomy_version,
+        "understand_graph_version": understand_graph_version,
+    }
+
+
+def make_content_operation_key(
+    *,
+    corpus_id: UUID,
+    stage: str,
+    operation_type: str,
+    source_input_version: str,
+    request_hash: str,
+    model_provider: str,
+    model_name: str,
+    taxonomy_version: str,
+    understand_graph_version: str,
+    prompt_config_version: str,
+) -> str:
+    return sha256_hex(
+        canonical_json(
+            content_operation_identity_payload(
+                corpus_id=corpus_id,
+                stage=stage,
+                operation_type=operation_type,
+                source_input_version=source_input_version,
+                request_hash=request_hash,
+                model_provider=model_provider,
+                model_name=model_name,
+                taxonomy_version=taxonomy_version,
+                understand_graph_version=understand_graph_version,
+                prompt_config_version=prompt_config_version,
+            )
+        )
+    )
+
+
+def incremental_operation_identity_payload(
+    *,
+    incremental_run_id: UUID,
+    corpus_id: UUID,
+    stage: str,
+    operation_type: str,
+    source_input_version: str,
+    request_hash: str,
+    model_provider: str,
+    model_name: str,
+    taxonomy_version: str,
+    understand_graph_version: str,
+    prompt_config_version: str,
+) -> dict[str, str]:
+    payload = content_operation_identity_payload(
+        corpus_id=corpus_id,
+        stage=stage,
+        operation_type=operation_type,
+        source_input_version=source_input_version,
+        request_hash=request_hash,
+        model_provider=model_provider,
+        model_name=model_name,
+        taxonomy_version=taxonomy_version,
+        understand_graph_version=understand_graph_version,
+        prompt_config_version=prompt_config_version,
+    )
+    payload["incremental_run_id"] = str(incremental_run_id)
+    return payload
+
+
+def make_incremental_operation_key(
+    *,
+    incremental_run_id: UUID,
+    corpus_id: UUID,
+    stage: str,
+    operation_type: str,
+    source_input_version: str,
+    request_hash: str,
+    model_provider: str,
+    model_name: str,
+    taxonomy_version: str,
+    understand_graph_version: str,
+    prompt_config_version: str,
+) -> str:
+    return sha256_hex(
+        canonical_json(
+            incremental_operation_identity_payload(
+                incremental_run_id=incremental_run_id,
+                corpus_id=corpus_id,
+                stage=stage,
+                operation_type=operation_type,
+                source_input_version=source_input_version,
+                request_hash=request_hash,
+                model_provider=model_provider,
+                model_name=model_name,
+                taxonomy_version=taxonomy_version,
+                understand_graph_version=understand_graph_version,
+                prompt_config_version=prompt_config_version,
+            )
+        )
+    )
