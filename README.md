@@ -2,15 +2,17 @@
 
 ## Current status
 
-**Phase 07 — Incremental Updates: local implementation PASS, not independently re-verified.**
-Phase 06 historical independent FAIL / NO-GO and later exclusive retry-allowlist correction remain
-in `PROGRESS.md`. Phase 05 historical independent FAIL / NO-GO remains in `PROGRESS.md`. Phase 03
-current status is independent final follow-up GO: committed, PR #3 merged to `main` as `ceb2bf0`,
-remote CI PASS (2 successful checks).
+**Phase 08 — MCP Operations: local implementation PASS, not independently re-verified.**
+Phase 07 historical independent FAIL / NO-GO and later downgrade/mixed-ownership corrections remain
+in `PROGRESS.md`. Phase 06 historical independent FAIL / NO-GO and later exclusive retry-allowlist
+correction remain in `PROGRESS.md`. Phase 05 historical independent FAIL / NO-GO remains in
+`PROGRESS.md`. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged
+to `main` as `ceb2bf0`, remote CI PASS (2 successful checks).
 
 The repository now provides grounded Understand and Examine over the Phase 02 data layer, a
-PostgreSQL-backed durable workflow that can survive process death, and focused incremental updates
-over an immutable corpus baseline:
+PostgreSQL-backed durable workflow that can survive process death, focused incremental updates
+over an immutable corpus baseline, and a stdio MCP business server over the same application
+services:
 
 - corpus-scoped `Corpus`, `Source`, `SourceVersion`, and `SourceBlock` records that are immutable by
   application contract and API/service behavior;
@@ -32,13 +34,17 @@ over an immutable corpus baseline:
   LangGraph PostgreSQL checkpoints, a costly-operation ledger, and real process-kill resume;
 - focused incremental updates (`CorpusRevision`, `IncrementalRun`) that detect SHA-256 source
   changes, recompute only provenance-affected work, reuse unaffected artifacts with canonical
-  unchanged-byte proof, and persist executed-versus-reused operation evidence; and
-- all verified Phase 01–06 foundation capabilities.
+  unchanged-byte proof, and persist executed-versus-reused operation evidence;
+- a stdio MCP server (`python -m app.mcp_server`) with typed corpus, workflow, review, and
+  incremental tools that delegate to the same services as HTTP, plus a compact workflow
+  status/timeline/resume panel in the existing React shell; and
+- all verified Phase 01–07 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
 internet-facing production hardening remain excluded.
 
-**MCP business operations, register publication, and production deployment are not implemented.**
+**Register publication and production deployment are not implemented.** MCP is local-development /
+trusted-client scope with corpus isolation and no production authentication.
 
 ## Runtime and dependency baseline
 
@@ -61,7 +67,7 @@ Primary backend versions are locked in `backend/uv.lock`:
 - httpx 0.28.1 (OpenAI-compatible live provider path)
 - pgvector 0.5.0 (used for SQLAlchemy `vector(64)` storage and cosine queries)
 - pypdf 6.16.1, python-docx 1.2.0, and python-multipart 0.0.32
-- MCP 2.0.0 (locked but no MCP server or business tools yet)
+- MCP 2.0.0 (stdio business server over the same application services as HTTP)
 - Uvicorn 0.52.3
 - Ruff 0.16.3, mypy 2.3.1, pytest 9.1.1, pytest-asyncio 1.4.0,
   pytest-cov 7.1.0, and HTTPX 0.28.1
@@ -159,14 +165,16 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.7.0`, current Phase 07 metadata, and a truthful statement that
-focused incremental updates and stable-file inbox watching are implemented over grounded
-Understand, Examine, explicit human review, and durable resume, while MCP business operations and
-register publication are not.
+Returns application version `0.8.0`, current Phase 08 metadata, and a truthful statement that MCP
+business operations are implemented as a stdio server over the same application services as HTTP
+(corpus/source inspection, durable workflow start/inspect/resume, understanding and examination
+inspection, explicit item-level review, and incremental evidence inspection), while register
+publication is not.
 
 ### Phase 02 corpus and source API
 
 - `POST /corpora`
+- `GET /corpora` — optional exact `name` filter; no corpus-name special casing
 - `GET /corpora/{corpus_id}`
 - `POST /corpora/{corpus_id}/sources` — multipart `logical_name`, `declared_format`, and `file`
 - `GET /corpora/{corpus_id}/sources`
@@ -294,8 +302,8 @@ content. Phase 03/04 finding records are not mutated.
 
 A session completes only when every required item has a terminal explicit decision. Pending required
 items return `review_session_incomplete`. Cross-corpus session/item lookups return not found.
-Vector scores are not evidence. The same operations are available to the React review panel and to
-machine/API clients. MCP is not implemented.
+Vector scores are not evidence. The same operations are available to the React review panel, HTTP
+clients, and MCP tools. MCP does not add a second review implementation.
 
 ### Phase 06 Durable Workflow API
 
@@ -386,6 +394,60 @@ $incremental = Invoke-RestMethod -Method Post `
   -Body (@{ baseline_revision_id = $baseline.id } | ConvertTo-Json)
 Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/incremental-runs/$($incremental.id)/evidence"
 ```
+
+### Phase 08 MCP business operations
+
+The MCP server is a separate stdio process role over the same `ApplicationServices` graph as FastAPI.
+It does not reimplement ingestion, Understand, Examine, review transitions, checkpoints, or
+incremental impact analysis. Entry point:
+
+```powershell
+python -m app.mcp_server
+```
+
+Transport is MCP 2.0.0 stdio. Clients use `Client(stdio_client(StdioServerParameters(...)))`.
+In-process tests may construct `Client(create_mcp_server(services))`. There is no streamable HTTP
+MCP transport in this phase.
+
+Typed tools (17):
+
+- inspect: `list_corpora`, `get_corpus`, `list_sources`, `get_workflow_status`, `get_understanding`,
+  `get_examination`, `open_review`, `list_review_items`, `get_current_revision`,
+  `get_incremental_evidence`
+- mutate: `start_workflow`, `resume_workflow`, `approve_review_item`, `reject_review_item`,
+  `edit_review_item`, `complete_review`, `start_incremental_run`
+
+Review mutations call `ReviewService.record_decision` / `complete_session`. `EDIT` requires
+non-blank `edited_content` and `reviewer_authored_acknowledged=true` with no default. Tools never
+auto-approve, batch-approve, or complete a session with pending required items. `decision_source`
+remains `api` because the existing CHECK constraint allows only `api`/`ui`; MCP uses `actor="mcp"`.
+No Alembic `0008` migration was added.
+
+Application errors are returned as MCP tool errors whose message starts with `APPLICATION_ERROR `
+followed by JSON `{code,detail,action}`. The complete tool path — request-model construction,
+service invocation, and response conversion — runs inside that boundary. Unexpected exceptions
+become `internal_error` without traceback, exception text, source content, or credentials on the
+MCP result or server stderr. `comment` is bounded to 2000 characters in the MCP schema, matching
+HTTP. Cross-corpus identifiers return the same business codes as HTTP (`*_not_found`,
+`review_session_incomplete`, `workflow_run_already_completed`, `stale_baseline`).
+
+MCP is local-development / trusted-client scope. It is not production authentication, RBAC, or an
+arbitrary shell/file execution surface. Register publication tools are not implemented.
+
+A container-side tool-discovery probe:
+
+```powershell
+docker compose exec backend python -m app.mcp_probe
+```
+
+Executable stdio evidence: `tests/test_mcp_e2e.py` (Aurora machine review including approve/reject/
+edit/complete/resume; Harbor same tools plus cross-corpus denial).
+
+The React shell keeps the Phase 05 review panel and adds a compact workflow status panel: run id,
+status, current stage, resume count, review status, current corpus revision, and recent events.
+Resume is available for failed runs, and for `waiting_for_review` runs only after the linked review
+session is completed. Resume is unavailable while required review remains pending, for completed
+runs, and for normal pending or running states. Human Review UI remains primary.
 
 ### Normalization and exact provenance
 
@@ -512,11 +574,10 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.7.0`,
-`Phase 07 — Incremental Updates`, focused incremental updates and stable-file inbox watching over
-grounded Understand/Examine plus explicit human review and durable resume, and the absence of MCP
-business operations and register publication. The frontend status shell includes a minimal review
-panel. Human Review UI remains primary.
+All three services should report healthy. `/version` should report application version `0.8.0`,
+`Phase 08 — MCP Operations`, MCP business operations over the same services as HTTP, and the
+absence of register publication. The frontend status shell includes the Phase 05 review panel and a
+compact workflow status/timeline/resume panel. Human Review UI remains primary.
 
 ## CI
 
@@ -524,8 +585,9 @@ panel. Human Review UI remains primary.
 
 - Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Phase 07 test-database
   schema round-trip `0006 → 0007 → 0006 → 0007`, Ruff format/lint, mypy, pytest with coverage
-  (includes populated `0007` downgrade with incremental ledger rows, process-kill/resume, and
-  incremental Aurora/Harbor proof), and package build.
+  (includes populated `0007` downgrade with incremental ledger rows, process-kill/resume,
+  incremental Aurora/Harbor proof, and MCP in-memory/stdio tests), dedicated
+  `tests/test_mcp_e2e.py` stdio evidence, and package build.
 - Frontend: Node 22.20.0, `npm ci`, Prettier, ESLint, TypeScript, Vitest, and production build.
 
 No deployment workflow exists.
@@ -582,7 +644,7 @@ No deployment workflow exists.
 - Examine evaluates a centrally versioned ruleset against grounded Phase 03 facts. It is not a
   user-upload rule editor, generic expression engine, or register-publication step.
 - Human review is an explicit item-level gate over Examine findings. It does not publish a register
-  version or provide MCP tools.
+  version. MCP and HTTP call the same review service; MCP does not auto-approve.
 - Durable resume is implemented for the workflow run. It does not publish approved items or run a
   separate worker fleet. The API process executes the graph; the subprocess worker exists for
   kill/resume proof.
@@ -617,10 +679,13 @@ No deployment workflow exists.
 - The watcher is stable-file polling of a mounted inbox. It is not inotify, watchdog, Kafka, or a
   distributed worker. Eligibility is identical SHA-256 plus size across `WATCH_STABLE_POLLS`
   polls, not filesystem mtime alone.
-- MCP business operations and register publication remain unimplemented.
+- MCP is a local-development stdio server for trusted clients. It has no production authentication,
+  RBAC, streamable HTTP transport, or register-publication tools. Arbitrary shell/file execution is
+  not exposed.
+- Register publication and production deployment remain unimplemented.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–07 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–08 architecture and later-phase plans
