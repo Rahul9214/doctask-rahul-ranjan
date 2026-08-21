@@ -34,6 +34,12 @@ async def test_phase02_api_exercises_ingestion_inspection_citation_and_search(
         corpus_id = corpus_response.json()["id"]
         fetched_corpus = await client.get(f"/corpora/{corpus_id}")
         assert fetched_corpus.json()["name"] == "API Corpus"
+        listed = await client.get("/corpora")
+        assert listed.status_code == 200
+        assert any(item["id"] == corpus_id for item in listed.json())
+        named = await client.get("/corpora", params={"name": "API Corpus"})
+        assert named.status_code == 200
+        assert named.json()[0]["id"] == corpus_id
 
         source_path = corpus_fixtures / "aurora-control-hub" / "decision-log.txt"
         ingest_response = await client.post(

@@ -16,16 +16,15 @@ from app.db import (
     ReadinessReport,
     check_dependencies,
     create_engine,
-    create_session_factory,
 )
 from app.errors import ConflictError, ModelError, NotFoundError, Phase02Error, ValidationError
 from app.examine_service import ExamineService
 from app.incremental_service import IncrementalService
-from app.model_gateway import ModelAdapter, create_model_adapter
+from app.model_gateway import ModelAdapter
 from app.request_limits import UploadRequestSizeGuard
 from app.review_service import ReviewService
+from app.runtime import build_application_services
 from app.services import Phase02Service
-from app.storage import LocalFileStorage
 from app.understand_service import UnderstandService
 from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
@@ -61,72 +60,36 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-        session_factory = create_session_factory(engine)
-        application.state.engine = engine
-        application.state.session_factory = session_factory
         application.state.readiness_probe = readiness_probe or partial(
             check_dependencies,
             engine,
             app_settings.readiness_timeout_seconds,
         )
-        resolved_phase02 = phase02_service or Phase02Service(
-            session_factory,
-            LocalFileStorage(
-                app_settings.source_storage_path,
-                app_settings.max_upload_bytes,
-            ),
-        )
-        adapter = model_adapter or create_model_adapter(app_settings)
-        resolved_understand = understand_service or UnderstandService(
-            resolved_phase02.session_factory,
-            resolved_phase02,
-            adapter,
+        built = build_application_services(
             app_settings,
+            engine=engine,
+            phase02_service=phase02_service,
+            understand_service=understand_service,
+            examine_service=examine_service,
+            review_service=review_service,
+            workflow_service=workflow_service,
+            incremental_service=incremental_service,
+            watcher_service=watcher_service,
+            model_adapter=model_adapter,
         )
-        application.state.phase02_service = resolved_phase02
-        application.state.understand_service = resolved_understand
-        resolved_examine = examine_service or ExamineService(
-            resolved_phase02.session_factory,
-            resolved_phase02,
-            resolved_understand,
-        )
-        application.state.examine_service = resolved_examine
-        application.state.review_service = review_service or ReviewService(
-            resolved_phase02.session_factory,
-            resolved_phase02,
-            resolved_examine,
-        )
-        application.state.workflow_service = workflow_service or WorkflowService(
-            resolved_phase02.session_factory,
-            resolved_phase02,
-            resolved_examine,
-            application.state.review_service,
-            adapter,
-            app_settings,
-        )
-        resolved_incremental = incremental_service or IncrementalService(
-            resolved_phase02.session_factory,
-            resolved_phase02,
-            resolved_understand,
-            resolved_examine,
-            application.state.review_service,
-            adapter,
-            app_settings,
-        )
-        application.state.incremental_service = resolved_incremental
-        resolved_watcher = watcher_service
-        if resolved_watcher is None:
-            resolved_watcher = WatcherService.from_settings(
-                resolved_phase02.session_factory,
-                resolved_phase02,
-                resolved_incremental,
-                app_settings,
-            )
-        application.state.watcher_service = resolved_watcher
+        application.state.engine = engine
+        application.state.session_factory = built.session_factory
+        application.state.phase02_service = built.phase02
+        application.state.understand_service = built.understand
+        application.state.examine_service = built.examine
+        application.state.review_service = built.review
+        application.state.workflow_service = built.workflow
+        application.state.incremental_service = built.incremental
+        application.state.watcher_service = built.watcher
         stop = asyncio.Event()
         poll_task: asyncio.Task[None] | None = None
-        if resolved_watcher is not None:
-            poll_task = asyncio.create_task(resolved_watcher.run_forever(stop))
+        if built.watcher is not None:
+            poll_task = asyncio.create_task(built.watcher.run_forever(stop))
         yield
         stop.set()
         if poll_task is not None:
@@ -139,9 +102,10 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 07 focused incremental updates and stable-file inbox watching over "
-            "grounded Understand, Examine, explicit human review, and durable resume. "
-            "MCP business operations and register publication are not implemented."
+            "Phase 08 MCP business operations over grounded Understand, Examine, explicit "
+            "human review, durable resume, and focused incremental updates. MCP is a stdio "
+            "adapter over the same application services as HTTP. Register publication is "
+            "not implemented."
         ),
         lifespan=lifespan,
     )

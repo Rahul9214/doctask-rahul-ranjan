@@ -74,15 +74,14 @@ def test_version_is_truthful_about_phase_scope() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "app_version": "0.7.0",
-        "current_phase": "Phase 07 — Incremental Updates",
+        "app_version": "0.8.0",
+        "current_phase": "Phase 08 — MCP Operations",
         "implementation_status": (
-            "Focused incremental updates and stable-file inbox watching are implemented over "
-            "grounded Understand, Examine, explicit human review, and durable resume: SHA-256 "
-            "source-version change detection, provenance impact analysis, reuse of unaffected "
-            "artifacts with canonical unchanged-byte proof, executed-versus-reused operation "
-            "evidence, conservative fresh review for changed evidence, and stale-baseline "
-            "concurrency control. MCP business operations and register publication are not "
-            "implemented."
+            "MCP business operations are implemented as a stdio server over the same application "
+            "services as HTTP: corpus/source inspection, durable workflow start/inspect/resume, "
+            "understanding and examination inspection, explicit item-level review "
+            "(approve/reject/edit/complete), and incremental evidence inspection. Generation never "
+            "auto-approves. MCP is local-development / trusted-client scope with corpus isolation "
+            "and no production authentication. Register publication is not implemented."
         ),
     }

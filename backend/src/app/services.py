@@ -59,6 +59,14 @@ class Phase02Service:
                 raise _corpus_not_found()
             return corpus
 
+    async def list_corpora(self, *, name: str | None = None) -> list[Corpus]:
+        async with self.session_factory() as session:
+            query: Select[tuple[Corpus]] = select(Corpus).order_by(Corpus.created_at, Corpus.id)
+            if name is not None and name.strip():
+                query = query.where(Corpus.name == name.strip())
+            result = await session.scalars(query)
+            return list(result)
+
     async def list_sources(self, corpus_id: UUID) -> list[Source]:
         async with self.session_factory() as session:
             if await session.get(Corpus, corpus_id) is None:

@@ -3,24 +3,27 @@
 ## Status
 
 **Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, Phase 04
-Examine, Phase 05 item-level human review, Phase 06 durable resume, and Phase 07 focused incremental
-updates are implemented.** Independent Phase 03 FAIL (grounding) and follow-up NO-GO remain historical
-record. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged to `main`
-as `ceb2bf0`, remote CI PASS. Phase 04 and Phase 05 independent FAIL / NO-GO remain historical.
-Phase 06 initial local implementation PASS; independent verification FAIL / NO-GO; later exclusive
-retry-allowlist correction is implemented locally and is not independently re-verified. Phase 07 is
-a local implementation PASS and is not independently re-verified. Examine consumes grounded
-Phase 03 records and revalidates
-Phase 02 provenance before persisting definitive findings. Human review creates an explicit
-`WAITING_FOR_REVIEW` session from a completed examination and records item-level approve/reject/edit
-decisions without publishing a register. Durable workflow runs coordinate those stages with
-PostgreSQL LangGraph checkpoints, a session-level same-run execution lock, an operation ledger, and
-process-kill resume. Incremental runs detect SHA-256 source-version changes against a durable
-corpus revision, recompute only provenance-affected work, reuse unaffected artifacts with canonical
-unchanged-byte proof, and persist executed-versus-reused operation evidence.
+Examine, Phase 05 item-level human review, Phase 06 durable resume, Phase 07 focused incremental
+updates, and Phase 08 MCP business operations are implemented.** Independent Phase 03 FAIL (grounding)
+and follow-up NO-GO remain historical record. Phase 03 current status is independent final follow-up
+GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 and Phase 05 independent
+FAIL / NO-GO remain historical. Phase 06 initial local implementation PASS; independent verification
+FAIL / NO-GO; later exclusive retry-allowlist correction is implemented locally and is not
+independently re-verified. Phase 07 is a local implementation PASS and is not independently
+re-verified. Phase 08 original local implementation PASS was independently FAIL / NO-GO; a local
+correction for the MCP error boundary, stderr logging, input-limit parity, and resume UI is
+implemented and is not independently re-verified. Examine
+consumes grounded Phase 03 records and revalidates Phase 02 provenance before persisting definitive
+findings. Human review creates an explicit `WAITING_FOR_REVIEW` session from a completed examination
+and records item-level approve/reject/edit decisions without publishing a register. Durable workflow
+runs coordinate those stages with PostgreSQL LangGraph checkpoints, a session-level same-run
+execution lock, an operation ledger, and process-kill resume. Incremental runs detect SHA-256
+source-version changes against a durable corpus revision, recompute only provenance-affected work,
+reuse unaffected artifacts with canonical unchanged-byte proof, and persist executed-versus-reused
+operation evidence. MCP is a stdio process role over the same `ApplicationServices` as FastAPI.
 
-MCP business tools, register publication, and production deployment remain planned. Implementation
-evidence may simplify or revise those plans; revisions are recorded in `PROGRESS.md`.
+Register publication and production deployment remain planned. Implementation evidence may simplify
+or revise those plans; revisions are recorded in `PROGRESS.md`.
 
 ## Design goals
 
@@ -40,7 +43,7 @@ It does not exist to demonstrate infrastructure breadth.
 
 The explicit non-cuttable floor is limited to behaviors 1–5: visible path-changing stages, durable resume, item-level human review, machine-driven flow, and no-bluffing. Understand, examine, and stay alive must each remain genuinely represented, but detailed sub-features inside the movements may be cut with explicit rationale.
 
-One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Phase 07 implements focused incremental stay-alive with executable no-full-rerun proof. Concurrent publication, MCP, and one-command stranger-setup polish remain later.
+One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Phase 07 implements focused incremental stay-alive with executable no-full-rerun proof. Concurrent publication, one-command stranger-setup polish, and production authentication remain later.
 
 ## Stack classification
 
@@ -55,7 +58,7 @@ The assignment allows comparable orchestration/tools when justified.
 
 Our chosen implementation is Python, FastAPI, LangGraph, PostgreSQL with pgvector, React with TypeScript, and MCP. MCP is the strongest chosen machine-interface shape, not an absolute assignment mandate.
 
-## Implemented Phase 01–07 runtime
+## Implemented Phase 01–08 runtime
 
 The current runtime boundary is deliberately small:
 
@@ -63,12 +66,15 @@ The current runtime boundary is deliberately small:
 flowchart LR
     Browser[ReactStatusAndReview] -->|/api/*| Nginx[Nginx]
     Nginx --> API[FastAPI]
-    API --> P2[Phase02Services]
-    API --> P3[UnderstandService]
-    API --> P4[ExamineService]
-    API --> P5[ReviewService]
-    API --> P6[WorkflowService]
-    API --> P7[IncrementalService]
+    Machine[MCPClient] -->|stdio| MCP[MCPServer]
+    API --> Services[ApplicationServices]
+    MCP --> Services
+    Services --> P2[Phase02Services]
+    Services --> P3[UnderstandService]
+    Services --> P4[ExamineService]
+    Services --> P5[ReviewService]
+    Services --> P6[WorkflowService]
+    Services --> P7[IncrementalService]
     API --> Watch[StableFileWatcher]
     P6 --> DurableGraph[LangGraphDurableWorkflow]
     DurableGraph --> P3
@@ -100,7 +106,11 @@ flowchart LR
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
 - FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
   analysis-run, Examine examination-run, human-review, durable workflow-run, corpus-revision, and
-  incremental-run routes. `POST /watcher/poll` is available when `WATCH_INPUT_PATH` is set.
+  incremental-run routes. `GET /corpora` lists corpora with an optional exact name filter.
+  `POST /watcher/poll` is available when `WATCH_INPUT_PATH` is set.
+- The MCP stdio server is a second process role. It constructs the same `ApplicationServices`
+  (`include_watcher=False`) and registers typed tools that call those services. It does not own a
+  second review/workflow implementation.
 - `/health` has no database dependency.
 - `/ready` performs a bounded PostgreSQL connection check and verifies `pg_extension` contains
   `vector`; safe structured HTTP 503 output is returned otherwise.
@@ -111,13 +121,14 @@ flowchart LR
   `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`;
   `20260819_0006` creates `workflow_runs`, `durable_operations`, `workflow_run_events`, and
   LangGraph checkpoint tables; `20260819_0007` creates `corpus_revisions`, `incremental_runs`,
-  `incremental_artifact_evidence`, and `watcher_files`.
+  `incremental_artifact_evidence`, and `watcher_files`. Phase 08 adds no schema revision.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
 - LangGraph executes Understand and Examine stages with real conditional skips. The outer durable
   graph uses `AsyncPostgresSaver` with `durability="sync"`. Human review uses `interrupt()` and
-  remains `waiting_for_review` until Phase 05 completion. MCP remains locked but unused.
+  remains `waiting_for_review` until Phase 05 completion. MCP resume of a waiting run does not
+  auto-approve.
 
 ## Implemented Phase 02 data layer
 
@@ -232,12 +243,28 @@ Implemented now:
 - create and inspect review sessions, enumerate review items with grounded evidence, record
   explicit item-level approve/reject/edit decisions under row-level transactional locking, and
   complete a session only after required items have terminal decisions;
-- start, inspect, and resume corpus-scoped durable workflow runs, including event listing.
+- start, inspect, and resume corpus-scoped durable workflow runs, including event listing;
+- list corpora (`GET /corpora`) with an optional exact name filter.
 
 Later planned responsibilities:
 
 - publish approved-only register versions;
 - serve immutable source snippets/locators safely.
+
+### MCP server
+
+Implemented in Phase 08 as a thin stdio adapter (`python -m app.mcp_server`) over
+`ApplicationServices`:
+
+- inspect corpora and sources;
+- start, inspect, and resume durable workflow runs;
+- inspect understanding, examination findings, review items, current revision, and incremental
+  evidence;
+- submit explicit approve/reject/edit decisions and complete a review session.
+
+MCP exposes the gate but does not bypass it. Transport is MCP 2.0.0 stdio for local/trusted
+clients. Production authentication and register-publication tools are not implemented. No new
+persistence is required; Alembic head remains `20260819_0007`.
 
 ### LangGraph Understand workflow
 
@@ -379,16 +406,15 @@ A sophisticated event system (watchdog, inotify, Kafka, Celery, Redis) is not us
 
 ### Chosen MCP server
 
-Planned as a thin adapter over the same application services as FastAPI:
+Implemented in Phase 08 as a thin adapter over the same application services as FastAPI:
 
-- create/upload/configure a corpus and run;
-- inspect status and stage decisions;
+- inspect a corpus and its sources;
+- start, inspect, and resume a durable workflow run;
 - retrieve pending item-level review proposals;
-- submit explicit approve/reject decisions;
-- resume the interrupted graph; and
-- verify the resulting published register and audit history.
+- submit explicit approve/reject/edit decisions and complete the session;
+- inspect understanding, examination, current revision, and incremental evidence.
 
-MCP exposes the gate but does not bypass it. The demonstrated path must not let the proposing agent automatically approve its own proposals. This is a workflow requirement, not an added RBAC or proposer/reviewer identity-separation requirement.
+MCP exposes the gate but does not bypass it. The demonstrated path must not let the proposing agent automatically approve its own proposals. This is a workflow requirement, not an added RBAC or proposer/reviewer identity-separation requirement. Verify-published-register tools remain later; publication is not implemented.
 
 ## Core records
 
@@ -570,7 +596,8 @@ Rules:
 - Mixed approval/rejection/edit is allowed. Rejecting one item does not discard sibling decisions.
 - Edited reviewer text is marked reviewer-authored and is not treated as system-grounded evidence.
 - Phase 03/04 records are not mutated by review.
-- React and API use the same decision validation. MCP is not implemented.
+- React, HTTP, and MCP use the same decision validation. MCP tools call `ReviewService`; they do
+  not auto-approve.
 - Publication of approved-only register versions is not implemented.
 
 ## Exact provenance
@@ -629,7 +656,7 @@ Taxonomy `software-project-assurance.v1` is configuration, not corpus-name logic
 project identity, owner/accountability, milestone/date, status, risk, decision, dependency, and
 control/assurance. Document prompt-injection text is untrusted evidence.
 
-Register drafting and human review remain later phases.
+Register drafting remains later. Human review is implemented in Phase 05; MCP and HTTP share that gate.
 
 ## Examine movement
 
@@ -811,8 +838,9 @@ A transactional outbox is deliberately not part of the initial commitment.
 Document prompt-injection defense is behavior 8. Phase 03 implements the Understand-level
 treatment: source text is wrapped as untrusted evidence, cannot redefine system behavior, cannot
 disable provenance, and cannot mark the project compliant. Phase 04 extends this: injection text
-cannot become an examination rule or override evaluator behavior. Full tool-call/self-approval
-defense remains later because those operations do not exist yet.
+cannot become an examination rule or override evaluator behavior. MCP tools expose the existing
+review gate; they do not auto-approve. Document-driven tool-call/self-approval defense for
+arbitrary model-proposed tool execution remains later and is not part of this MCP adapter.
 
 Trust order:
 
@@ -871,7 +899,8 @@ stage completion/skip/failure, resume count, checkpoint presence, operation-key 
 waiting-for-review. Phase 07 persists incremental measurement JSON: baseline versus incremental
 stage counts, classify/extract executed versus skipped source-version IDs, avoided model-operation
 count, affected/reused artifact counts, changed-source count, duration, and `estimated_cost_usd=0`
-in deterministic mode. No observability UI exists.
+in deterministic mode. Phase 08 adds a compact React workflow status/timeline/resume panel over
+existing APIs. No elaborate observability dashboard exists.
 
 ## Keyless test architecture
 
@@ -882,8 +911,8 @@ separately configurable. Every provider output still passes citation resolution 
 assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 citation validator, the
 grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, FastAPI,
 PostgreSQL LangGraph checkpoints, the operation ledger, a real subprocess kill/resume, focused
-incremental Aurora/Harbor second runs, stale-baseline concurrency, and stable-file watcher polling.
-MCP transport and register publication remain later.
+incremental Aurora/Harbor second runs, stale-baseline concurrency, stable-file watcher polling,
+and real MCP stdio client/server transport. Register publication remains later.
 
 Fixtures must include:
 
@@ -909,7 +938,10 @@ Fixtures must include:
 - Integration `TRUNCATE` is guarded by a fixed disposable database name, a distinct application
   database name, and an explicit destructive-test opt-in.
 - Corpus/run IDs scope every read/write.
-- Review decisions record a human actor and proposal version.
+- Review decisions record an actor and proposal version. HTTP/UI reviewers typically use
+  `actor="reviewer"` and `decision_source="ui"` or `"api"`. Phase 08 MCP review mutations persist
+  `actor="mcp"` with `decision_source="api"` because the existing CHECK constraint allows only
+  `api`/`ui`; `api` is the transport/source enum, not a claim that the actor is human.
 - Phase 02 source versions/blocks are not overwritten through application APIs/services; database
   mutation-prevention triggers and restricted roles are absent.
 - Watcher inbox paths reject traversal, unsupported extensions, empty files, and oversized files.
@@ -953,7 +985,8 @@ This planned architecture becomes documented implementation only as matching evi
 5. mandatory kill/resume evidence; concurrent publication remains later;
 6. incremental affected-set, executed-versus-reused operations, and unchanged canonical-hash
    evidence (Phase 07 local implementation);
-7. UI and MCP/API shared-gate behavior;
+7. UI and MCP/API shared-gate behavior (Phase 08 local implementation; MCP stdio over the same
+   review/workflow services; compact workflow status panel; register publication remains later);
 8. planned Behavior 7/8/10 adversarial, keyless, and measurement evidence; and
 9. planned Behavior 6 fresh-clone local/container audit on a second corpus.
 

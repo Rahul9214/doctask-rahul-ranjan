@@ -107,6 +107,13 @@ async def create_corpus(payload: CorpusCreate, service: Service) -> CorpusRespon
     return CorpusResponse.model_validate(corpus)
 
 
+@router.get("/corpora", response_model=list[CorpusResponse])
+async def list_corpora(service: Service, name: str | None = None) -> list[CorpusResponse]:
+    return [
+        CorpusResponse.model_validate(corpus) for corpus in await service.list_corpora(name=name)
+    ]
+
+
 @router.get("/corpora/{corpus_id}", response_model=CorpusResponse)
 async def get_corpus(corpus_id: UUID, service: Service) -> CorpusResponse:
     return CorpusResponse.model_validate(await service.get_corpus(corpus_id))

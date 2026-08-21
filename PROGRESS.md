@@ -2,25 +2,27 @@
 
 ## Current state
 
-- **Current phase:** Phase 07 — Incremental Updates — original independent verification FAIL /
-  NO-GO retained; first correction then first re-verification NO-GO; local final correction
-  PASS then independent re-verification NO-GO (unsafe populated `0007` downgrade); local
-  `0007` downgrade correction PASS then mixed-ownership test proof was vacuous; local mixed-ownership
-  regression test correction PASS. Do not mark independent PASS. Phase 06 historical independent FAIL / NO-GO and exclusive retry-allowlist correction
-  remain below.
+- **Current phase:** Phase 08 — MCP Operations — original local implementation PASS, then
+  independent verification FAIL / NO-GO; local correction PASS; independent re-verification
+  NO-GO; local final correction PASS below. Do not mark independent PASS.
+  Phase 07 historical independent FAIL / NO-GO and later downgrade/mixed-ownership corrections remain
+  below. Phase 06 historical independent FAIL / NO-GO and exclusive retry-allowlist correction remain
+  below.
 - **Implementation status:** grounded Understand is committed on `main`. Grounded Examine and
   Phase 05 human review remain historically independently FAIL / NO-GO; those corrections were
   implemented locally and are on the ancestry of this branch. Phase 06 durable resume had an
   initial local PASS on `feat/phase-06-durable-resume`, then independent verification FAIL /
   NO-GO; exclusive retry-allowlist correction is implemented locally and is not independently
   re-verified. Phase 07 focused incremental updates and stable-file watching are implemented
-  locally on `feat/phase-07-incremental-updates`. Independent Phase 07 verification was FAIL /
-  NO-GO; a first correction pass followed; independent re-verification remained NO-GO. This record
-  is a local final correction pass (local PASS). Independent re-verification of that pass was
-  NO-GO on populated `0007` downgrade. A local downgrade-order correction followed; migration
-  implementation passed inspection, but the mixed-ownership regression proof was vacuous. A local
-  mixed-ownership test correction follows. Independent re-verification of that correction is
-  not complete.
+  locally; original independent verification FAIL / NO-GO and later corrections remain below and
+  are not independently re-verified as PASS. Phase 08 MCP business operations over the same
+  application services, real stdio client/server e2e, Harbor isolation, HTTP/MCP consistency, and
+  a compact workflow status/timeline/resume panel are implemented locally on
+  `feat/phase-08-mcp-operations`. Independent Phase 08 verification was FAIL / NO-GO; a local
+  correction for the MCP error boundary, stderr logging, input-limit parity, and resume UI follows
+  and is not independently re-verified. Independent re-verification of that correction was NO-GO
+  (raw MCP content omitted from leak assertions; README Resume wording stale). A local final
+  correction for those two items follows and is not independently re-verified.
 - **Application capabilities implemented:** liveness, dependency readiness, version/phase metadata,
   corpus/source/version/block schema, streamed ingestion, four parsers, exact citation resolution,
   deterministic pgvector retrieval, configurable model boundary with a keyless deterministic adapter,
@@ -32,6 +34,7 @@
   ledger, real process-kill resume, same-corpus run isolation, focused incremental corpus revisions,
   provenance impact analysis, canonical unchanged-byte proof, executed-versus-reused operation
   evidence, conservative fresh review, stale-baseline concurrency, stable-file inbox watching,
+  a stdio MCP business server over the same application services, a compact workflow status panel,
   local Compose stack, tests, and CI definition
 - **Dependencies installed by this work:** locked Python and npm dependencies recorded below;
   httpx 0.28.1 is now a main backend dependency for the live OpenAI-compatible adapter;
@@ -63,6 +66,9 @@
   independent re-verification of that pass NO-GO (populated `0007` downgrade); local downgrade
   correction PASS; mixed-ownership downgrade regression proof was vacuous; local mixed-ownership
   test correction PASS on `feat/phase-07-incremental-updates`. Do not mark independent PASS.
+- **Phase 08 status:** original local implementation PASS on `feat/phase-08-mcp-operations`;
+  independent verification FAIL / NO-GO; local correction PASS; independent re-verification
+  NO-GO; local final correction PASS. Do not mark independent PASS. Do not begin Phase 09.
 - **SuperDocs familiarization/docs confirmation:** COMPLETE — manual candidate action outside the repository; recording it here is our process choice, not an assignment-mandated artifact
 
 ## Phase 00 record â€” 2026-08-18
@@ -2277,3 +2283,176 @@ Verification:
   migration defect
 
 Do not mark independent PASS. Do not begin Phase 08.
+
+## Phase 08 record — 2026-08-21
+
+Implemented MCP business operations and a compact workflow status/timeline/resume panel over the
+existing Phase 01–07 system. Did not rebuild the Phase 05 ReviewPanel. Did not begin
+deployment/final-submission work. No Alembic `0008`. Git writes were not performed by the agent.
+
+Architecture:
+
+- Shared `ApplicationServices` in `backend/src/app/runtime.py` used by FastAPI and MCP.
+- Stdio MCP 2.0.0 server: `python -m app.mcp_server`. Probe: `python -m app.mcp_probe`.
+- Tools delegate to existing Phase 02/03/04/05/06/07 services. No duplicate business logic.
+- Application version `0.8.0`, phase `Phase 08 — MCP Operations`.
+- Alembic head remains `20260819_0007 (head)`.
+
+Seventeen typed tools: `list_corpora`, `get_corpus`, `list_sources`, `start_workflow`,
+`get_workflow_status`, `resume_workflow`, `get_understanding`, `get_examination`, `open_review`,
+`list_review_items`, `approve_review_item`, `reject_review_item`, `edit_review_item`,
+`complete_review`, `get_current_revision`, `start_incremental_run`, `get_incremental_evidence`.
+
+Review mutations call `ReviewService.record_decision` / `complete_session` with `actor="mcp"` and
+`decision_source="api"` (existing CHECK allows only `api`/`ui`). EDIT requires `edited_content` and
+`reviewer_authored_acknowledged=true` with no default. Tools never auto-approve.
+
+Errors: MCP tool message prefix `APPLICATION_ERROR ` plus JSON `{code,detail,action}`. Unexpected
+exceptions become `internal_error` without traceback.
+
+Verification (host, from `backend/` with the disposable test database):
+
+- `uv run ruff format --check .` — PASS; 88 files
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 75 source files
+- `uv run pytest -m integration` — PASS; 85 passed, 103 deselected (includes MCP e2e)
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 188 passed, **91.64%** (gate 90%)
+- `uv build` — PASS; `project_assurance_register-0.8.0`
+- dedicated `uv run pytest tests/test_mcp_e2e.py -v --no-cov` — PASS; 2 passed in 17.06s
+  - Aurora: start workflow → waiting_for_review → inspect understanding/examination/items →
+    approve/reject/edit → complete → resume → completed
+  - Harbor: same tools, Harbor sources (`Delivery Plan`, `Governance Notes`, not `Project Charter`),
+    cross-corpus `workflow_run_not_found` / `review_session_not_found`
+
+Frontend (from `frontend/`):
+
+- `npm run format:check` / `lint` / `typecheck` / `test` / `build` — PASS; 10 tests, production
+  bundle `index-DFRWEzFH.js`
+
+Docker:
+
+- `docker compose config` — PASS; `APP_VERSION=0.8.0`, `CURRENT_PHASE=Phase 08 — MCP Operations`
+- `docker compose build backend` — PASS
+- first `docker compose build frontend` failed (Windows paging-file / Docker OOM); retry PASS
+- `docker compose up` recreate backend+frontend — PASS
+- `GET /health` alive — PASS
+- `GET /ready` ready, pgvector 0.8.1 — PASS
+- `GET /version` 0.8.0 Phase 08 — PASS
+- `alembic current` in backend container = `20260819_0007 (head)` — PASS
+- `python -m app.mcp_probe` in backend container: 17 tools, `expected_present=true` — PASS
+- frontend `:5173` 200, `/api/ready` 200, bundle contains Workflow status panel — PASS
+- `docker compose ps`: db/backend/frontend healthy
+
+Failures during this pass (fixed, not residual):
+
+- Unchanged incremental runs do not advance current revision; stale-baseline tests ingest a
+  changed Decision Log before the first incremental run.
+- MCP 2.0.0 Client is `Client(stdio_client(StdioServerParameters(...)))`, not `Client(params)`.
+- Starting Aurora and Harbor workflows in one stdio subprocess caused `MemoryError` in
+  `storage.sha256_for_key`; Harbor e2e now starts only Harbor and proves isolation against the
+  pre-ingested Aurora corpus.
+- Frontend Prettier on `WorkflowStatusPanel`; test `getByText("completed")` matched status and
+  review status.
+- Host Docker OOM during the first frontend image rebuild; recovered and rebuilt.
+
+Do not mark independent PASS. Do not begin Phase 09. Candidate owns Git writes.
+
+## Independent Phase 08 verification — FAIL / NO-GO
+
+Independent Phase 08 verification: **FAIL / NO-GO**
+
+Verified blockers:
+
+- MCP handler `invoke_application` wrapped only the awaited service call; request-model construction
+  and response conversion could raise Pydantic `ValidationError` into the MCP SDK, which serializes
+  `str(exception)`.
+- `logger.exception` wrote traceback and exception text to stderr, visible to a stdio parent/client.
+- Review `comment` lacked MCP schema `max_length=2000` parity with HTTP.
+- No stdio regression proving sentinel source/credential text cannot appear in tool results or
+  server stderr.
+- `WorkflowStatusPanel` offered Resume for every non-completed run, including `waiting_for_review`
+  with pending required items.
+- Failed replacement workflow lookup left the previous run's Resume controls actionable.
+
+Do not mark independent PASS. Do not begin Phase 09.
+
+## Phase 08 local correction — 2026-08-21
+
+Correction pass only. No MCP redesign. No Phase 09. No Git writes. No Alembic `0008`.
+
+Fixes:
+
+- `execute_mcp_tool` runs the complete tool body (request models, service calls, response models).
+- `install_mcp_error_boundary` sanitizes SDK argument/output validation `ToolError`s so clients
+  receive only `APPLICATION_ERROR {code,detail,action}`.
+- Unexpected failures log `mcp_internal_error` with tool name and `error_category` only; no
+  traceback, `str(exc)`, source text, or credentials.
+- MCP `comment` `max_length=2000`; `edited_content` remains `min_length=1`, `max_length=8000`.
+- Stdio tests inject sentinels (`SECRET_SENTINEL_DO_NOT_LEAK`, `SOURCE_TEXT_SENTINEL_DO_NOT_LEAK`,
+  `postgresql://credential-sentinel`) via a test-only env hook gated on
+  `ALLOW_DESTRUCTIVE_TEST_DATABASE` and `project_assurance_test`; result and stderr contain none.
+- Oversized comment and malformed UUID return `invalid_request` without echoing input or Pydantic
+  text.
+- Resume is offered only for `failed`, or `waiting_for_review` when the linked review session is
+  `completed`. New lookup clears prior run state so a failed load cannot leave stale Resume.
+- TASK/README/architecture current-state wording: MCP is implemented; MCP actor is `"mcp"` with
+  `decision_source="api"` as the existing transport enum, not a human actor.
+
+Verification:
+
+- focused `uv run pytest tests/test_mcp_errors.py tests/test_mcp_tools.py tests/test_mcp_api_consistency.py tests/test_mcp_e2e.py -v --no-cov` — PASS (12 tests after `_required` restore)
+- `uv run ruff format --check .` / `ruff check .` / `mypy src tests` — PASS; 75 source files
+- `uv run pytest -m integration` — PASS; 88 passed, 103 deselected
+- `uv run pytest --cov=app --cov-report=term-missing` — PASS; 191 passed, **91.35%** (gate 90%)
+- `uv build` — PASS; `project_assurance_register-0.8.0`
+- frontend format/lint/typecheck/test/build — PASS; 14 tests; bundle `index-DF_1_iiL.js`
+- Docker rebuild backend+frontend — PASS
+- `/health` alive, `/ready` pgvector 0.8.1, `/version` 0.8.0 Phase 08 — PASS
+- `alembic current` = `20260819_0007 (head)` — PASS
+- `python -m app.mcp_probe` 17 tools, `expected_present=true` — PASS
+- frontend `:5173` 200, `/api/ready` 200, bundle contains Workflow status and
+  “Resume is available after the linked review session is completed.” — PASS
+
+Do not mark independent PASS. Do not begin Phase 09. Candidate owns Git writes.
+
+## Independent Phase 08 re-verification — NO-GO
+
+Independent Phase 08 re-verification: **NO-GO**
+
+Remaining blockers after the first local correction:
+
+- Raw MCP returned content is not included in leak assertions. `mcp_helpers.call_err()` parsed
+  `APPLICATION_ERROR` and returned only `{code, detail, action}`, so sentinel text around the
+  marker could escape regression proof.
+- README Resume wording was stale: the UI was documented as offering resume “when the run is
+  waiting or failed”, which does not match the implemented contract.
+
+Do not mark independent PASS. Do not begin Phase 09.
+
+## Phase 08 local final correction — 2026-08-21
+
+Final correction only. No MCP redesign. No Phase 09. No Git writes.
+
+Fixes:
+
+- `call_err()` / `require_application_error()` retain `raw_text` (complete MCP SDK content:
+  text blocks, structured content, meta) plus parsed `code` / `detail` / `action`.
+- Stdio leak tests assert sentinels absent from both raw MCP content and captured server stderr
+  (`SECRET_SENTINEL_DO_NOT_LEAK`, `SOURCE_TEXT_SENTINEL_DO_NOT_LEAK`,
+  `postgresql://credential-sentinel`), including unexpected-exception and response-validation
+  injection with response validation still enabled.
+- Oversized comment (>2000) and malformed UUID stdio proofs assert `invalid_request`, no input
+  echo in raw content or stderr, and no traceback / raw Pydantic ValidationError text.
+- README Resume contract: available for failed runs and for `waiting_for_review` only after the
+  linked review session is completed; unavailable while required review is pending, for completed
+  runs, and for normal pending/running states.
+
+Verification (focused, from `backend/`):
+
+- `uv run pytest tests/test_mcp_e2e.py tests/test_mcp_errors.py -v` — PASS; 10 passed in 31.91s
+- `uv run ruff format --check .` — PASS; 88 files already formatted
+- `uv run ruff check .` — PASS
+- `uv run mypy src tests` — PASS; 75 source files
+- `git diff --check` — PASS
+
+Do not mark independent PASS. Do not begin Phase 09. Candidate owns Git writes.

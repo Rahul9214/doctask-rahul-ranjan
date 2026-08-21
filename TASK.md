@@ -23,7 +23,12 @@ and authoritative count recomputation, explicit edit acknowledgement, and a mini
 Database-level mutation-prevention triggers or restricted roles are not implemented. Phase 06 adds
 durable workflow resume. Phase 07 adds focused incremental updates and stable-file inbox watching.
 
-MCP business server, register publication, production deployment, and a full Behavior 10
+MCP business operations are implemented in Phase 08 as a local-development stdio
+server over the same application services as HTTP: real MCP client/tool discovery,
+typed corpus/workflow/review/incremental tools, shared-service delegation, and
+explicit item-level review (approve/reject/edit/complete) without auto-approval.
+MCP is trusted-client scope only; production authentication/RBAC is not
+implemented. Register publication, production deployment, and a full Behavior 10
 measurement/observability UI remain unimplemented.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
@@ -432,8 +437,9 @@ The non-cuttable Task 1 floor is done only when:
 
 ## Prioritized completion target
 
-Behaviors 6–10, MCP business interface, register publication, graceful degradation scenarios, and
-the full reproducibility/evidence suite remain planned. Focused incremental watched updates are
+Behaviors 6–10 remaining polish, register publication, graceful degradation scenarios, and
+the full reproducibility/evidence suite remain planned. MCP business operations are
+implemented in Phase 08 as a local stdio adapter. Focused incremental watched updates are
 implemented in Phase 07. Each behavior 6–10 item is a **Strong differentiator — may be cut only with
 explicit rationale if time forces a trade-off.** Their omission must not be hidden inside the
 minimum Definition of Done.
