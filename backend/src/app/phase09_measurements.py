@@ -78,8 +78,6 @@ def invariant_fields(record: dict[str, Any]) -> dict[str, Any]:
         "disclaimer": record["disclaimer"],
         "units": record["units"],
         "sample_count": record["sample_count"],
-        "environment_os": record["environment"]["os"],
-        "environment_platform": record["environment"]["platform"],
         "model_provider": record["environment"]["model_provider"],
         "database": record["environment"]["database"],
         "environment_note": record["environment"]["note"],

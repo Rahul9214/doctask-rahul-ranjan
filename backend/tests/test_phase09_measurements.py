@@ -5,6 +5,7 @@ import os
 import platform
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from helpers import (
@@ -28,6 +29,75 @@ from app.storage import LocalFileStorage
 MEASUREMENT_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "measurements" / "phase-09-local.json"
 )
+
+
+def _sample_record(
+    os_name: str,
+    platform_name: str,
+    *,
+    baseline_seconds: list[float],
+    review_resume_seconds: list[float],
+    incremental_seconds: list[float],
+) -> dict[str, Any]:
+    return build_record(
+        os_name=os_name,
+        platform_name=platform_name,
+        database="project_assurance_test",
+        baseline_seconds=baseline_seconds,
+        review_resume_seconds=review_resume_seconds,
+        incremental_seconds=incremental_seconds,
+        baseline_ops=2,
+        incremental_ops=2,
+        avoided_ops=2,
+    )
+
+
+def test_invariant_fields_ignore_os_platform_and_timings() -> None:
+    windows = _sample_record(
+        "nt",
+        "windows",
+        baseline_seconds=[3.818553700000848],
+        review_resume_seconds=[1.53495760000078],
+        incremental_seconds=[1.443162099998517],
+    )
+    linux = _sample_record(
+        "posix",
+        "linux",
+        baseline_seconds=[0.4],
+        review_resume_seconds=[0.2],
+        incremental_seconds=[0.3],
+    )
+    validate_record(windows)
+    validate_record(linux)
+    assert windows["environment"]["os"] == "nt"
+    assert windows["environment"]["platform"] == "windows"
+    assert linux["environment"]["os"] == "posix"
+    assert linux["environment"]["platform"] == "linux"
+    windows_invariants = invariant_fields(windows)
+    linux_invariants = invariant_fields(linux)
+    assert windows_invariants == linux_invariants
+    assert "environment_os" not in windows_invariants
+    assert "environment_platform" not in windows_invariants
+    assert windows_invariants["model_provider"] == "deterministic"
+    assert windows_invariants["database"] == "project_assurance_test"
+    assert windows_invariants["logical_model_operations"] == linux["logical_model_operations"]
+
+
+def test_validate_record_still_requires_os_and_platform() -> None:
+    record = _sample_record(
+        "nt",
+        "windows",
+        baseline_seconds=[1.0],
+        review_resume_seconds=[1.0],
+        incremental_seconds=[1.0],
+    )
+    del record["environment"]["os"]
+    with pytest.raises(ValueError, match="environment missing os"):
+        validate_record(record)
+    record["environment"]["os"] = "nt"
+    del record["environment"]["platform"]
+    with pytest.raises(ValueError, match="environment missing platform"):
+        validate_record(record)
 
 
 @pytest.mark.integration
