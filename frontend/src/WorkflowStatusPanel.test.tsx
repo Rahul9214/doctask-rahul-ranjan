@@ -300,4 +300,24 @@ describe("WorkflowStatusPanel", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("run-1")).not.toBeInTheDocument();
   });
+
+  it("shows a loading label and keeps native controls labeled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    const user = userEvent.setup();
+    render(<WorkflowStatusPanel />);
+    expect(screen.getByLabelText("Workflow corpus ID")).toBeEnabled();
+    expect(screen.getByLabelText("Workflow run ID")).toBeEnabled();
+    await user.type(screen.getByLabelText("Workflow corpus ID"), "corpus-1");
+    await user.type(screen.getByLabelText("Workflow run ID"), "run-1");
+    await user.click(
+      screen.getByRole("button", { name: "Load workflow status" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Loading status…" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/traceback/i)).not.toBeInTheDocument();
+  });
 });

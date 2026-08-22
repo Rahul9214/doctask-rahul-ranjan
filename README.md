@@ -2,8 +2,10 @@
 
 ## Current status
 
-**Phase 08 — MCP Operations: local implementation PASS, not independently re-verified.**
-Phase 07 historical independent FAIL / NO-GO and later downgrade/mixed-ownership corrections remain
+**Phase 09 — Hardening: local initial PASS; independent verification FAIL / NO-GO; local
+correction PASS, not independently re-verified.**
+Phase 08 historical independent FAIL / NO-GO and later MCP error-boundary corrections remain in
+`PROGRESS.md`. Phase 07 historical independent FAIL / NO-GO and later downgrade/mixed-ownership corrections remain
 in `PROGRESS.md`. Phase 06 historical independent FAIL / NO-GO and later exclusive retry-allowlist
 correction remain in `PROGRESS.md`. Phase 05 historical independent FAIL / NO-GO remains in
 `PROGRESS.md`. Phase 03 current status is independent final follow-up GO: committed, PR #3 merged
@@ -37,7 +39,10 @@ services:
   unchanged-byte proof, and persist executed-versus-reused operation evidence;
 - a stdio MCP server (`python -m app.mcp_server`) with typed corpus, workflow, review, and
   incremental tools that delegate to the same services as HTTP, plus a compact workflow
-  status/timeline/resume panel in the existing React shell; and
+  status/timeline/resume panel in the existing React shell;
+- Phase 09 adversarial suites (prompt-injection, no-bluffing, provenance/tamper, malformed
+  upload/parser bounds, MCP security, human-review gate, incremental no-full-rerun, cross-corpus
+  isolation), recorded local measurements, and a lightweight secret-pattern/lockfile regression; and
 - all verified Phase 01–07 foundation capabilities.
 
 OCR, scanned-image interpretation, handwriting, spreadsheets, arbitrary binary formats, and
@@ -165,11 +170,10 @@ and the configured database URL are not returned.
 
 ### `GET /version`
 
-Returns application version `0.8.0`, current Phase 08 metadata, and a truthful statement that MCP
-business operations are implemented as a stdio server over the same application services as HTTP
-(corpus/source inspection, durable workflow start/inspect/resume, understanding and examination
-inspection, explicit item-level review, and incremental evidence inspection), while register
-publication is not.
+Returns application version `0.9.0`, current Phase 09 metadata, and a truthful statement that
+adversarial hardening, no-bluffing, provenance/tamper, MCP security, kill/resume, exclusive live
+retry, incremental no-full-rerun, concurrency isolation, and local measurements are implemented
+over the Phase 01–08 application, while register publication and production deployment are not.
 
 ### Phase 02 corpus and source API
 
@@ -574,9 +578,9 @@ Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
 docker compose ps
 ```
 
-All three services should report healthy. `/version` should report application version `0.8.0`,
-`Phase 08 — MCP Operations`, MCP business operations over the same services as HTTP, and the
-absence of register publication. The frontend status shell includes the Phase 05 review panel and a
+All three services should report healthy. `/version` should report application version `0.9.0`,
+`Phase 09 — Hardening`, adversarial hardening over the Phase 01–08 application, and the
+absence of register publication and production deployment. The frontend status shell includes the Phase 05 review panel and a
 compact workflow status/timeline/resume panel. Human Review UI remains primary.
 
 ## CI
@@ -586,8 +590,9 @@ compact workflow status/timeline/resume panel. Human Review UI remains primary.
 - Backend: Python 3.13.14, frozen uv install, pgvector service, migration, Phase 07 test-database
   schema round-trip `0006 → 0007 → 0006 → 0007`, Ruff format/lint, mypy, pytest with coverage
   (includes populated `0007` downgrade with incremental ledger rows, process-kill/resume,
-  incremental Aurora/Harbor proof, and MCP in-memory/stdio tests), dedicated
-  `tests/test_mcp_e2e.py` stdio evidence, and package build.
+  incremental Aurora/Harbor proof, MCP in-memory/stdio tests, and Phase 09 adversarial suites),
+  dedicated secret-pattern/lockfile regression, dedicated `tests/test_mcp_e2e.py` stdio evidence,
+  and package build.
 - Frontend: Node 22.20.0, `npm ci`, Prettier, ESLint, TypeScript, Vitest, and production build.
 
 No deployment workflow exists.
@@ -599,17 +604,28 @@ No deployment workflow exists.
 - Database settings use `SecretStr`; readiness and model errors expose controlled messages, not
   driver text, source content, or credentials.
 - Document text is stored and indexed as untrusted data; it is never an instruction or evidence
-  merely because a vector query returned it. Source sentences that attempt to override instructions
-  are classified as data and cannot disable provenance or fabricate compliance.
+  merely because a vector query returned it. Source sentences that attempt to override instructions,
+  fabricate approvals, suppress citations, impersonate reviewers, request secrets, or instruct MCP
+  tool execution are classified as data and cannot disable provenance or fabricate compliance.
+  Injection detection is corpus-agnostic and uses contextual instruction-attack markers after
+  NFKC compatibility folding only. Ordinary approval language is not treated as an attack.
+  General Unicode homoglyph/confusable resistance is not provided.
 - Citation validation rejects wrong hashes, locators, spans, quotes, tampered bytes, missing
   versions, persisted-block tampering, and cross-corpus lookups by reparsing original bytes.
-  Model output cannot override that validator.
+  Model output cannot override that validator. A Phase 09 provenance/tamper matrix exercises those
+  failures as controlled errors without exposing source text or tracebacks.
 - Upload size is bounded; client filenames cannot provide path components; storage keys are
   generated; partial staging files are removed on failure.
 - Upload protection is an HTTP request-size guard plus a streamed file-content bound; requests
   without usable `Content-Length` rely on streaming enforcement.
-- PDF signature/text extraction and DOCX ZIP structure, entry count, expanded size, per-entry size,
-  and compression ratio are checked before successful ingestion.
+- PDF signature/text extraction, encrypted/textless PDF rejection, a 200-page parser bound, and
+  DOCX ZIP structure, entry count, expanded size, per-entry size, and compression ratio are checked
+  before successful ingestion.
+- A lightweight tracked-source secret-pattern regression (`tests/test_secret_scan.py`) allows
+  explicit fake-test sentinels. It does not replace professional secret scanning.
+- Containers use local-only defaults intended solely for development. Compose services use
+  `restart: unless-stopped`. Runtime processes are not converted to non-root in this phase because
+  named volumes are written at runtime; that remains a production-deployment item.
 - Supported/common malformed-input classes exercised by the test suite return controlled
   cause/remedy errors. Exhaustive malformed-input containment is not claimed.
 - `.env`, virtual environments, dependency directories, coverage, build output, runtime database
@@ -621,7 +637,20 @@ No deployment workflow exists.
 ## Current limitations
 
 - PDF support is extractable text only; no OCR or scanned-image interpretation exists.
-- The pypdf parser has an upload-size bound but no separate process sandbox or parse-time timeout.
+- The pypdf parser has an upload-size bound and a 200-page parser bound but no separate process
+  sandbox or parse-time timeout.
+- Parser isolation and exhaustive malformed-input containment remain deferred.
+- A lightweight repository secret-pattern check and lockfile review are implemented. They do not
+  replace professional secret scanning or a networked vulnerability audit (`pip-audit` / `npm audit`
+  are not a Phase 09 gate).
+- Compose images still run as the image default user. Non-root conversion is deferred to production
+  deployment because `SOURCE_STORAGE_PATH` and `WATCH_INPUT_PATH` are writable named volumes.
+- Local measurements in `docs/measurements/phase-09-local.json` are one recorded local sample
+  generated by `backend/scripts/measure_phase09.py` / `tests/test_phase09_measurements.py`.
+  They are not production SLAs. Quote the committed artifact; do not copy rounded timings
+  independently.
+- Injection detection folds compatibility characters with NFKC only. It does not normalize
+  Cyrillic/Greek homoglyphs or provide generic confusable resistance.
 - Parser isolation and exhaustive malformed-input containment remain deferred.
 - DOCX support covers normal body paragraphs and table-cell paragraphs. Complex drawing text,
   headers/footers, comments, and merged/nested-table fidelity are not claimed.
@@ -681,11 +710,12 @@ No deployment workflow exists.
   polls, not filesystem mtime alone.
 - MCP is a local-development stdio server for trusted clients. It has no production authentication,
   RBAC, streamable HTTP transport, or register-publication tools. Arbitrary shell/file execution is
-  not exposed.
+  not exposed. Phase 09 adversarial MCP tests cover malformed identifiers, oversized fields,
+  cross-corpus denial, pending-complete, post-completion mutation, and sentinel non-leakage.
 - Register publication and production deployment remain unimplemented.
 
 ## Project documentation
 
 - `TASK.md` — persistent Task 1 engineering contract
 - `PROGRESS.md` — chronological decisions, commands, failures, evidence, and limitations
-- `docs/architecture.md` — implemented Phase 01–08 architecture and later-phase plans
+- `docs/architecture.md` — implemented Phase 01–09 architecture and later-phase plans

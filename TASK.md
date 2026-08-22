@@ -28,8 +28,13 @@ server over the same application services as HTTP: real MCP client/tool discover
 typed corpus/workflow/review/incremental tools, shared-service delegation, and
 explicit item-level review (approve/reject/edit/complete) without auto-approval.
 MCP is trusted-client scope only; production authentication/RBAC is not
-implemented. Register publication, production deployment, and a full Behavior 10
-measurement/observability UI remain unimplemented.
+implemented. Phase 09 adds adversarial/security suites, no-bluffing evidence,
+provenance/tamper matrix, malformed-input bounds, concurrency/kill-resume
+regression, incremental no-full-rerun regression, local measurements, and a
+lightweight secret-pattern/lockfile check. Register publication, production
+deployment, and a full Behavior 10 measurement/observability UI remain
+unimplemented. Phase 09 had a local implementation PASS, then independent verification
+FAIL / NO-GO; a local correction pass follows and is not independently re-verified.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -291,12 +296,17 @@ Additional qualities to retain where possible:
 
 The final evidence suite must prove the five explicit floor behaviors:
 
-- [ ] visible stage decisions and conditional retry/skip/escalation paths;
+- [x] visible stage decisions and conditional retry/skip/escalation paths
+  (Phase 03–06 local Understand/Examine/workflow evidence; not independently re-verified);
 - [x] a real human supplies mixed item-level approve/reject decisions;
 - [ ] only approved items are published;
-- [ ] a killed real worker process resumes without lost or duplicated completed work;
-- [ ] the machine interface drives the full flow and exposes explicit item-level review operations; and
-- [ ] unsupported claims remain unsupported, supported claims/findings resolve against immutable source or register locators, and success is reported only for verified durable state.
+- [x] a killed real worker process resumes without lost or duplicated completed work
+  (Phase 06 local `tests/test_process_kill_resume.py`; not independently re-verified);
+- [x] the machine interface drives the full flow and exposes explicit item-level review operations
+  (Phase 08 local MCP stdio/HTTP tools; not independently re-verified); and
+- [x] unsupported claims remain unsupported, supported claims/findings resolve against immutable
+  source or register locators, and success is reported only for verified durable state
+  (publication of a register version is still unimplemented).
 
 ### Planned movement evidence
 
@@ -319,8 +329,12 @@ A cut inside these movement details is allowed only with explicit rationale whil
 Each item below is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
 
 - [ ] Behavior 6: fresh-clone setup reaches a working system in minutes with one verified command.
-- [ ] Behavior 7: real keyless tests exercise the system, not only model mocks.
-- [ ] Behavior 8: document prompt injection cannot alter policy, call tools, or self-approve.
+- [x] Behavior 7: real keyless tests exercise the system, not only model mocks
+  (deterministic adapter plus real parsers, PostgreSQL, process-kill, MCP, and validators;
+  live paid model calls are not required; not independently re-verified).
+- [x] Behavior 8: document prompt injection cannot alter policy, call tools, or self-approve
+  (Phase 09 local executable suite after corpus-agnostic correction; not independently
+  re-verified).
 - [ ] Behavior 9: concurrent distinct and same-corpus runs remain isolated and publish safely.
 - [ ] Behavior 10: stage timing, attempts, usage, pricing basis, and honest cost are reported.
 

@@ -17,15 +17,18 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.8.0"
-    current_phase: str = "Phase 08 — MCP Operations"
+    app_version: str = "0.9.0"
+    current_phase: str = "Phase 09 — Hardening"
     implementation_status: str = (
-        "MCP business operations are implemented as a stdio server over the same application "
-        "services as HTTP: corpus/source inspection, durable workflow start/inspect/resume, "
-        "understanding and examination inspection, explicit item-level review "
-        "(approve/reject/edit/complete), and incremental evidence inspection. Generation never "
-        "auto-approves. MCP is local-development / trusted-client scope with corpus isolation "
-        "and no production authentication. Register publication is not implemented."
+        "Phase 09 adversarial hardening is implemented over the Phase 01–08 application: "
+        "prompt-injection and no-bluffing suites, provenance/tamper matrix, malformed-input "
+        "bounds, MCP security/error leakage controls, human-review gate regression, "
+        "kill/resume and exclusive live-retry proof, incremental no-full-rerun evidence, "
+        "concurrency isolation, and recorded local measurements. MCP remains a "
+        "local-development stdio server over the same application services as HTTP. "
+        "Generation never auto-approves. MCP is trusted-client scope with corpus isolation "
+        "and no production authentication. Register publication and production deployment "
+        "are not implemented."
     )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"

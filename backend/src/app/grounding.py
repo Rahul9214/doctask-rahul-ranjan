@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from uuid import UUID
 
 from app.taxonomy import INJECTION_PATTERN, derive_assertions, values_equivalent
@@ -14,7 +15,14 @@ def values_match(left: str, right: str) -> bool:
 
 
 def contains_untrusted_instruction(evidence: str) -> bool:
-    return INJECTION_PATTERN.search(evidence) is not None
+    """Detect contextual instruction attacks after NFKC compatibility folding only.
+
+    Full-width Latin and other compatibility forms are folded. Cyrillic/Greek
+    homoglyphs and general Unicode confusables are not normalized or detected.
+    """
+
+    candidates = (evidence, unicodedata.normalize("NFKC", evidence))
+    return any(INJECTION_PATTERN.search(candidate) is not None for candidate in candidates)
 
 
 def validate_assertion(

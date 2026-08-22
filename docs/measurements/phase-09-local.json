@@ -1,0 +1,52 @@
+{
+  "schema": "phase-09-measurements.v1",
+  "phase": "Phase 09 \u2014 Hardening",
+  "disclaimer": "Recorded local sample. Not a production SLA.",
+  "units": "seconds",
+  "sample_count": 1,
+  "environment": {
+    "os": "nt",
+    "platform": "windows",
+    "model_provider": "deterministic",
+    "database": "project_assurance_test",
+    "note": "Recorded local sample. Not a production SLA."
+  },
+  "deterministic_external_cost_usd": 0,
+  "operations": {
+    "baseline_workflow_waiting_for_review": {
+      "sample_count": 1,
+      "units": "seconds",
+      "raw_seconds": [
+        3.818553700000848
+      ],
+      "median_seconds": 3.818553700000848,
+      "min_seconds": 3.818553700000848,
+      "max_seconds": 3.818553700000848
+    },
+    "review_complete_and_resume": {
+      "sample_count": 1,
+      "units": "seconds",
+      "raw_seconds": [
+        1.53495760000078
+      ],
+      "median_seconds": 1.53495760000078,
+      "min_seconds": 1.53495760000078,
+      "max_seconds": 1.53495760000078
+    },
+    "incremental_one_source_update": {
+      "sample_count": 1,
+      "units": "seconds",
+      "raw_seconds": [
+        1.443162099998517
+      ],
+      "median_seconds": 1.443162099998517,
+      "min_seconds": 1.443162099998517,
+      "max_seconds": 1.443162099998517
+    }
+  },
+  "logical_model_operations": {
+    "baseline": 2,
+    "incremental_additional": 2,
+    "operations_avoided_by_skipped_classify_extract": 2
+  }
+}

@@ -110,9 +110,35 @@ CATEGORY_KEYWORDS: dict[FactCategory, tuple[str, ...]] = {
 
 IRRELEVANT_HEADER_TOKENS = frozenset({"milestone", "owner", "status", "control", "state", "date"})
 
+# Contextual instruction-attack markers. Corpus/project names never appear here.
+# Ordinary approval, status, or committee language is not an attack by itself.
+INSTRUCTION_ATTACK_PATTERNS: tuple[str, ...] = (
+    r"ignore (?:all )?(?:previous |prior |the )?(?:system )?instructions",
+    r"disregard (?:all |the )?(?:previous )?(?:instructions|policy|rules(?:et)?)",
+    r"(?:treat|interpret|use)\b (?:this |the following )?"
+    r"(?:sentence |document |text |paragraph )?as (?:a )?"
+    r"(?:binding |system(?:/developer)? |developer )?instructions?\b",
+    r"you are now (?:the )?(?:reviewer|system|assistant|developer)",
+    r"automatically approve",
+    r"auto-approve",
+    r"approve all (?:controls|findings|items|changes) "
+    r"(?:automatically|without (?:a |the )?(?:human )?review|without waiting)",
+    r"mark (?:the )?(?:project|corpus) compliant",
+    r"(?:suppress|disable|bypass) (?:all )?(?:citations|provenance|review)",
+    r"override (?:the )?(?:examination )?ruleset",
+    r"fabricate (?:the )?(?:evidence|citations?|approval)",
+    r"(?:execute|run|invoke)\b (?:the |this |the following )?"
+    r"(?:mcp(?:/tool)?(?: tool)?|tool (?:commands?|calls?))",
+    r"call the (?:mcp )?tool",
+    r"reveal (?:the )?(?:api key|openai_api_key|system prompt|secrets?)",
+    r"<\|?(?:system|assistant)\|?>",
+    r"```json\s*\{\s*\"role\"\s*:\s*\"system\"",
+    r"(?:facts|findings|evidence) (?:from|of) another corpus",
+    r"another corpus(?:'s)? (?:unsupported )?(?:facts?|findings?)",
+    r"treat (?:an? )?(?:unsupported )?(?:facts?|findings?) as authoritative",
+)
 INJECTION_PATTERN = re.compile(
-    r"ignore previous instructions|disregard (?:all |the )?instructions|"
-    r"mark the project compliant|treat this sentence as a binding instruction",
+    "|".join(f"(?:{pattern})" for pattern in INSTRUCTION_ATTACK_PATTERNS),
     re.IGNORECASE,
 )
 

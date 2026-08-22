@@ -102,10 +102,10 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 08 MCP business operations over grounded Understand, Examine, explicit "
-            "human review, durable resume, and focused incremental updates. MCP is a stdio "
-            "adapter over the same application services as HTTP. Register publication is "
-            "not implemented."
+            "Phase 09 hardening over grounded Understand, Examine, explicit human review, "
+            "durable resume, focused incremental updates, and MCP business operations. MCP "
+            "is a stdio adapter over the same application services as HTTP. Register "
+            "publication and production deployment are not implemented."
         ),
         lifespan=lifespan,
     )

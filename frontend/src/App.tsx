@@ -105,8 +105,9 @@ export default function App() {
         <h1 id="page-title">Project Assurance Register</h1>
         <p className="scope-message">
           Understand, Examine, item-level human review, durable resume, focused
-          incremental updates, and MCP business operations are implemented.
-          Register publication is not.
+          incremental updates, MCP business operations, and Phase 09 adversarial
+          hardening are implemented. Register publication and production
+          deployment are not.
         </p>
 
         <div className="status-card" aria-live="polite">

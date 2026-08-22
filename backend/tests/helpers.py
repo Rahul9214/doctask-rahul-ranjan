@@ -23,7 +23,7 @@ from app.operation_ledger import default_identity_versions
 from app.parsers import SourceFormat
 from app.review_service import ReviewService
 from app.schemas import ReviewDecisionCreate
-from app.services import Phase02Service
+from app.services import IngestionResult, Phase02Service
 from app.understand_service import UnderstandService
 from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
@@ -42,6 +42,51 @@ def fixture_upload(path: Path, source_format: SourceFormat) -> UploadFile:
         filename=path.name,
         headers=Headers({"content-type": MEDIA_TYPES[source_format]}),
     )
+
+
+def bytes_upload(
+    content: bytes,
+    filename: str,
+    source_format: SourceFormat,
+) -> UploadFile:
+    return UploadFile(
+        io.BytesIO(content),
+        filename=filename,
+        headers=Headers({"content-type": MEDIA_TYPES[source_format]}),
+    )
+
+
+async def ingest_text(
+    service: Phase02Service,
+    corpus_id: UUID,
+    logical_name: str,
+    text: str,
+    *,
+    filename: str = "note.txt",
+) -> IngestionResult:
+    return await service.ingest(
+        corpus_id=corpus_id,
+        logical_name=logical_name,
+        declared_format="txt",
+        upload=bytes_upload(text.encode("utf-8"), filename, "txt"),
+    )
+
+
+def assert_controlled_error(
+    error: object,
+    *,
+    code: str,
+    leaked: str | None = None,
+) -> None:
+    detail = str(getattr(error, "detail", error))
+    action = str(getattr(error, "action", ""))
+    assert getattr(error, "code", None) == code
+    combined = f"{detail}\n{action}".casefold()
+    assert "traceback" not in combined
+    assert "traceback (most recent call last)" not in combined
+    if leaked:
+        assert leaked not in detail
+        assert leaked not in action
 
 
 async def ingest_corpus(service: Phase02Service, corpus_dir: Path) -> Corpus:

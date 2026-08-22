@@ -21,13 +21,13 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.config import Settings
 from app.errors import LiveRetryDisposition, ModelError, ValidationError
+from app.grounding import contains_untrusted_instruction
 from app.parsers import SourceFormat
 from app.schemas import CitationRequest
 from app.taxonomy import (
     CATEGORY_KEYWORDS,
     EXTRACTION_RULES,
     FACT_CATEGORIES,
-    INJECTION_PATTERN,
     IRRELEVANT_HEADER_TOKENS,
     FactCategory,
     iter_rule_matches,
@@ -154,7 +154,7 @@ class DeterministicModelAdapter:
     async def extract_facts(self, blocks: Sequence[BlockContext]) -> ExtractionBatch:
         facts: list[ProposedFact] = []
         for block in blocks:
-            if INJECTION_PATTERN.search(block.normalized_text):
+            if contains_untrusted_instruction(block.normalized_text):
                 continue
             facts.extend(extract_facts_from_block(block))
         return ExtractionBatch(facts=facts, usage=zero_usage())
@@ -163,7 +163,7 @@ class DeterministicModelAdapter:
 def classify_block(block: BlockContext) -> BlockClassification:
     text = block.normalized_text.strip()
     lowered = text.casefold()
-    if INJECTION_PATTERN.search(text):
+    if contains_untrusted_instruction(text):
         return BlockClassification(
             source_block_id=block.source_block_id,
             relevant=False,
