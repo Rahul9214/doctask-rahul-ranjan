@@ -4,7 +4,7 @@ FROM python:3.13.14-slim-bookworm
 
 # Local-development image: the process uses the image default user because named volumes
 # at SOURCE_STORAGE_PATH and WATCH_INPUT_PATH are written at runtime. Non-root conversion
-# is a later production-deployment item, not a Phase 09 runtime change.
+# is a later production-deployment item, not a Phase 10 runtime change.
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

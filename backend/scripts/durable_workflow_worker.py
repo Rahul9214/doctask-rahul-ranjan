@@ -28,6 +28,7 @@ from app.db import create_engine, create_session_factory
 from app.examine_service import ExamineService
 from app.model_gateway import DeterministicModelAdapter
 from app.review_service import ReviewService
+from app.ruleset import load_ruleset_config
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 from app.understand_service import UnderstandService
@@ -46,7 +47,12 @@ def _service(storage_path: Path) -> WorkflowService:
     )
     adapter = DeterministicModelAdapter()
     understand = UnderstandService(session_factory, phase02, adapter, settings)
-    examine = ExamineService(session_factory, phase02, understand)
+    examine = ExamineService(
+        session_factory,
+        phase02,
+        understand,
+        load_ruleset_config(settings.ruleset_path),
+    )
     review = ReviewService(session_factory, phase02, examine)
     return WorkflowService(
         session_factory,

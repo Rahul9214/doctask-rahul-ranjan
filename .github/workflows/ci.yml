@@ -43,10 +43,10 @@ jobs:
       - run: uv sync --frozen --all-groups
       - run: uv run python scripts/ensure_test_database.py
       - run: uv run alembic upgrade head
-      - name: Verify Phase 07 test-database schema round trip
+      - name: Verify Phase 10 test-database schema round trip
         run: |
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
-          DATABASE_URL="$TEST_DATABASE_URL" uv run alembic downgrade 20260819_0006
+          DATABASE_URL="$TEST_DATABASE_URL" uv run alembic downgrade 20260819_0007
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
           DATABASE_URL="$TEST_DATABASE_URL" uv run alembic current
       - run: uv run ruff format --check .
@@ -55,8 +55,12 @@ jobs:
       - run: uv run pytest --cov=app --cov-report=term-missing
       - name: Secret-pattern regression over tracked source
         run: uv run pytest tests/test_secret_scan.py tests/test_dependency_review.py -v --no-cov
+      - name: Process-kill resume evidence
+        run: uv run pytest tests/test_process_kill_resume.py -v --no-cov
       - name: MCP stdio server/client evidence
         run: uv run pytest tests/test_mcp_e2e.py -v --no-cov
+      - name: Final register publication evidence
+        run: uv run pytest tests/test_publication_api.py tests/test_publication_integration.py tests/test_publication_integrity.py tests/test_publication_concurrency.py tests/test_final_acceptance.py tests/test_publication_migration.py tests/test_ruleset.py -v --no-cov
       - run: uv build
 
   frontend:

@@ -42,6 +42,28 @@ interface CorpusRevision {
   examination_run_id: string;
 }
 
+interface StageUsage {
+  graph: string;
+  stage_name: string;
+  status: string;
+  duration_ms: number | null;
+  model_operation_count: number;
+  model_attempt_count: number;
+  estimated_cost_usd: number | null;
+  cost_basis: string;
+}
+
+interface RunUsage {
+  total_duration_ms: number;
+  duration_basis: "outer_workflow_events";
+  total_model_operation_count: number;
+  total_model_attempt_count: number;
+  estimated_cost_usd: number | null;
+  cost_basis: string;
+  pricing_basis: string;
+  stages: StageUsage[];
+}
+
 async function readError(response: Response): Promise<ApiError> {
   try {
     const body = (await response.json()) as ApiError;
@@ -81,6 +103,7 @@ export default function WorkflowStatusPanel() {
   const [review, setReview] = useState<ReviewSession | null>(null);
   const [revision, setRevision] = useState<CorpusRevision | null>(null);
   const [revisionMissing, setRevisionMissing] = useState(false);
+  const [usage, setUsage] = useState<RunUsage | null>(null);
   const [loading, setLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -99,6 +122,7 @@ export default function WorkflowStatusPanel() {
     setReview(null);
     setRevision(null);
     setRevisionMissing(false);
+    setUsage(null);
     setLoading(true);
     try {
       const loaded = await requestJson<WorkflowRun>(
@@ -109,6 +133,11 @@ export default function WorkflowStatusPanel() {
       );
       setRun(loaded);
       setEvents(loadedEvents);
+      setUsage(
+        await requestJson<RunUsage>(
+          `/api/corpora/${loaded.corpus_id}/workflow-runs/${loaded.id}/usage`,
+        ),
+      );
       if (loaded.review_session_id) {
         setReview(
           await requestJson<ReviewSession>(
@@ -178,8 +207,9 @@ export default function WorkflowStatusPanel() {
     >
       <h2 id="workflow-title">Workflow status</h2>
       <p>
-        Inspect a durable workflow run, recent events, review state, and the
-        current corpus revision. Resume does not create review decisions.
+        Inspect a durable workflow run, recent events, review state, stage
+        timing/cost, and the current corpus revision. Resume does not create
+        review decisions.
       </p>
 
       <form
@@ -279,6 +309,31 @@ export default function WorkflowStatusPanel() {
               {run.error_detail}
               {run.error_action ? ` Next action: ${run.error_action}` : ""}
             </p>
+          )}
+          <h3>Stage timing and cost</h3>
+          {usage ? (
+            <>
+              <p>
+                Outer workflow duration {usage.total_duration_ms} ms ·{" "}
+                {usage.total_model_operation_count} operations ·{" "}
+                {usage.total_model_attempt_count} attempts · cost{" "}
+                {usage.estimated_cost_usd ?? "unavailable"} ({usage.cost_basis})
+              </p>
+              <p>{usage.pricing_basis}</p>
+              <ol className="workflow-events">
+                {usage.stages.map((stage) => (
+                  <li
+                    key={`${stage.graph}-${stage.stage_name}-${stage.status}`}
+                  >
+                    {stage.graph} · {stage.stage_name} ·{" "}
+                    {stage.duration_ms ?? 0} ms · {stage.model_attempt_count}{" "}
+                    attempts · {stage.cost_basis}
+                  </li>
+                ))}
+              </ol>
+            </>
+          ) : (
+            <p>No usage summary is loaded yet.</p>
           )}
           <h3>Recent events</h3>
           {events.length === 0 ? (

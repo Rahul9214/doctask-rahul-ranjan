@@ -11,8 +11,11 @@ from mcp_helpers import (
     stdio_mcp,
     stdio_mcp_capturing_stderr,
 )
+from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.mcp_server import BUSINESS_TOOL_NAMES
+from app.models import Fact
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 
@@ -142,6 +145,77 @@ async def test_mcp_stdio_aurora_machine_review_flow(
         assert events["run"]["status"] == "completed"
         assert events["events"]
         assert events["run"]["resume_count"] >= 1
+        missing = await call_err(client, "get_current_register", {"corpus_id": corpus_id})
+        assert missing["code"] == "publication_not_found"
+        reviewed = await call_ok(
+            client,
+            "list_review_items",
+            {"corpus_id": corpus_id, "review_session_id": run["review_session_id"]},
+        )
+        applied = next(
+            item
+            for item in mappings(reviewed["items"])
+            if item["review_status"] in {"approved", "edited"} and item["fact_ids"]
+        )
+        fact_id = UUID(str(applied["fact_ids"][0]))
+        async with phase02.session_factory() as session:
+            fact = await session.scalar(
+                select(Fact).where(Fact.id == fact_id, Fact.corpus_id == UUID(str(corpus_id)))
+            )
+            assert fact is not None
+            original_citation = dict(fact.citation or {})
+            tampered = dict(original_citation)
+            tampered["exact_quote"] = "mcp-publication-tamper-sentinel"
+            fact.citation = tampered
+            flag_modified(fact, "citation")
+            await session.commit()
+        rejected_publication = await call_err(
+            client,
+            "publish_register",
+            {
+                "corpus_id": corpus_id,
+                "review_session_id": run["review_session_id"],
+            },
+        )
+        assert rejected_publication["code"] == "publication_evidence_validation_failed"
+        assert "mcp-publication-tamper-sentinel" not in rejected_publication["raw_text"]
+        async with phase02.session_factory() as session:
+            fact = await session.get(Fact, fact_id)
+            assert fact is not None
+            fact.citation = original_citation
+            flag_modified(fact, "citation")
+            await session.commit()
+        published = await call_ok(
+            client,
+            "publish_register",
+            {
+                "corpus_id": corpus_id,
+                "review_session_id": run["review_session_id"],
+            },
+        )
+        assert published["status"] == "published"
+        assert published["is_current"] is True
+        assert published["workflow_run_id"] == run["id"]
+        applied_rules = {item["rule_id"] for item in mappings(published["items"])}
+        rejected_rules = set(published["omitted_rejected_rule_ids"])
+        assert rejected_rules
+        assert rejected_rules.isdisjoint(applied_rules)
+        edited = next(item for item in mappings(published["items"]) if item["reviewer_authored"])
+        assert edited["content_origin"] == "mixed"
+        assert edited["system_grounded"] is False
+        assert "Reviewer-authored" in str(edited["reviewer_authored_content"])
+        current = await call_ok(client, "get_current_register", {"corpus_id": corpus_id})
+        assert current["id"] == published["id"]
+        repeated = await call_ok(
+            client,
+            "publish_register",
+            {
+                "corpus_id": corpus_id,
+                "review_session_id": run["review_session_id"],
+            },
+        )
+        assert repeated["id"] == published["id"]
+        assert repeated["content_sha256"] == published["content_sha256"]
 
 
 @pytest.mark.integration
@@ -211,6 +285,58 @@ async def test_mcp_stdio_harbor_same_tools_and_cross_corpus_denial(
             },
         )
         assert cross_session["code"] == "review_session_not_found"
+        for item in mappings(harbor_items["items"]):
+            if item["review_required"] and item["review_status"] == "pending":
+                await call_ok(
+                    client,
+                    "approve_review_item",
+                    {
+                        "corpus_id": harbor_id,
+                        "review_session_id": harbor_run["review_session_id"],
+                        "item_id": item["id"],
+                    },
+                )
+        completed = await call_ok(
+            client,
+            "complete_review",
+            {"corpus_id": harbor_id, "review_session_id": harbor_run["review_session_id"]},
+        )
+        assert completed["status"] == "completed"
+        unpublished = await call_err(client, "get_current_register", {"corpus_id": harbor_id})
+        assert unpublished["code"] == "publication_not_found"
+        resumed = await call_ok(
+            client,
+            "resume_workflow",
+            {"corpus_id": harbor_id, "workflow_run_id": harbor_run["id"]},
+        )
+        assert resumed["status"] == "completed"
+        finished = await call_ok(
+            client,
+            "get_workflow_status",
+            {"corpus_id": harbor_id, "workflow_run_id": harbor_run["id"]},
+        )
+        assert finished["run"]["status"] == "completed"
+        published = await call_ok(
+            client,
+            "publish_register",
+            {
+                "corpus_id": harbor_id,
+                "review_session_id": harbor_run["review_session_id"],
+            },
+        )
+        assert published["status"] == "published"
+        assert published["corpus_id"] == harbor_id
+        current = await call_ok(client, "get_current_register", {"corpus_id": harbor_id})
+        assert current["id"] == published["id"]
+        cross_register = await call_err(
+            client,
+            "get_register",
+            {
+                "corpus_id": aurora.id,
+                "publication_id": UUID(str(published["id"])),
+            },
+        )
+        assert cross_register["code"] == "publication_not_found"
 
 
 def _assert_no_leak(text: str, *sentinels: str) -> None:

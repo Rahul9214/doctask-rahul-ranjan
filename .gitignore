@@ -26,12 +26,13 @@ frontend/coverage/
 *.tsbuildinfo
 
 # Local database and runtime files
+var/
+backend/var/
 *.db
 *.sqlite
 *.sqlite3
 postgres-data/
 tmp/
-backend/var/
 
 # IDE and OS caches
 .idea/

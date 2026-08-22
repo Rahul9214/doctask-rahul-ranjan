@@ -21,6 +21,7 @@ from app.errors import ConflictError, ModelError, NotFoundError, Phase02Error, V
 from app.examine_service import ExamineService
 from app.incremental_service import IncrementalService
 from app.model_gateway import ModelAdapter
+from app.publication_service import PublicationService
 from app.request_limits import UploadRequestSizeGuard
 from app.review_service import ReviewService
 from app.runtime import build_application_services
@@ -52,6 +53,7 @@ def create_app(
     review_service: ReviewService | None = None,
     workflow_service: WorkflowService | None = None,
     incremental_service: IncrementalService | None = None,
+    publication_service: PublicationService | None = None,
     watcher_service: WatcherService | None = None,
     model_adapter: ModelAdapter | None = None,
 ) -> FastAPI:
@@ -74,6 +76,7 @@ def create_app(
             review_service=review_service,
             workflow_service=workflow_service,
             incremental_service=incremental_service,
+            publication_service=publication_service,
             watcher_service=watcher_service,
             model_adapter=model_adapter,
         )
@@ -85,6 +88,7 @@ def create_app(
         application.state.review_service = built.review
         application.state.workflow_service = built.workflow
         application.state.incremental_service = built.incremental
+        application.state.publication_service = built.publication
         application.state.watcher_service = built.watcher
         stop = asyncio.Event()
         poll_task: asyncio.Task[None] | None = None
@@ -102,10 +106,10 @@ def create_app(
         title=app_settings.app_name,
         version=app_settings.app_version,
         description=(
-            "Phase 09 hardening over grounded Understand, Examine, explicit human review, "
-            "durable resume, focused incremental updates, and MCP business operations. MCP "
-            "is a stdio adapter over the same application services as HTTP. Register "
-            "publication and production deployment are not implemented."
+            "Phase 10 final delivery over grounded Understand, Examine, explicit human review, "
+            "durable resume, focused incremental updates, MCP business operations, and "
+            "approved-only register publication. MCP is a stdio adapter over the same "
+            "application services as HTTP. Hosted cloud deployment is not implemented."
         ),
         lifespan=lifespan,
     )

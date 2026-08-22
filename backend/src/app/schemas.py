@@ -507,3 +507,105 @@ class WatcherPollResponse(BaseModel):
     triggered: int
     failed: int
     events: list[WatcherPollEventResponse]
+
+
+class PublishRegisterRequest(BaseModel):
+    actor: str = Field(default="reviewer", min_length=1, max_length=100)
+    publication_source: Literal["api", "ui"] = "api"
+
+
+class PublishedRegisterItemResponse(BaseModel):
+    id: UUID
+    published_register_id: UUID
+    corpus_id: UUID
+    review_item_id: UUID
+    finding_id: UUID
+    rule_id: str
+    rule_version: str
+    outcome: str
+    severity: str
+    title: str
+    message: str
+    structured_reason: dict[str, object]
+    evidence_kind: str
+    review_status: str
+    content_origin: str
+    system_grounded: bool
+    reviewer_authored: bool
+    reviewer_authored_content: str | None
+    reviewer_authored_acknowledged: bool
+    value_hash: str
+    fact_ids: list[UUID]
+    contradiction_ids: list[UUID]
+    citations: list[ReviewCitation]
+    grounded_facts: list[FactResponse]
+    contradictions: list[ContradictionResponse]
+
+
+class PublicationEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    published_register_id: UUID
+    corpus_id: UUID
+    event_type: str
+    payload: dict[str, object]
+    actor: str
+    publication_source: str
+    created_at: datetime
+
+
+class PublishedRegisterResponse(BaseModel):
+    id: UUID
+    corpus_id: UUID
+    publication_number: int
+    is_current: bool
+    review_session_id: UUID
+    examination_run_id: UUID
+    analysis_run_id: UUID
+    workflow_run_id: UUID | None
+    corpus_revision_id: UUID | None
+    status: str
+    register_status: str
+    version_identity: str
+    content_sha256: str
+    actor: str
+    publication_source: str
+    applied_count: int
+    rejected_omitted_count: int
+    pending_optional_omitted_count: int
+    edited_count: int
+    omitted_rejected_rule_ids: list[str]
+    published_at: datetime
+    created_at: datetime
+    items: list[PublishedRegisterItemResponse]
+    events: list[PublicationEventResponse]
+
+
+class StageUsage(BaseModel):
+    graph: Literal["understand", "examine", "workflow"]
+    stage_name: str
+    status: str
+    duration_ms: int | None
+    model_operation_count: int
+    model_attempt_count: int
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    estimated_cost_usd: float | None
+    cost_basis: str
+    skip_reason: str | None = None
+
+
+class RunUsageResponse(BaseModel):
+    workflow_run_id: UUID
+    corpus_id: UUID
+    stages: list[StageUsage]
+    total_duration_ms: int
+    duration_basis: Literal["outer_workflow_events"]
+    total_model_operation_count: int
+    total_model_attempt_count: int
+    total_input_tokens: int
+    total_output_tokens: int
+    estimated_cost_usd: float | None
+    cost_basis: str
+    pricing_basis: str

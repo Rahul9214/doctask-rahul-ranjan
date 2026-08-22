@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, TextIO, TypedDict, cast
 from uuid import UUID
 
-from helpers import make_incremental, make_workflow
+from helpers import make_incremental, make_publication, make_workflow
 from mcp import Client
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -39,6 +39,7 @@ def application_services_from_phase02(phase02: Phase02Service) -> ApplicationSer
         review=workflow.review,
         workflow=workflow,
         incremental=incremental,
+        publication=make_publication(phase02, review=workflow.review),
         watcher=None,
         model_adapter=workflow.adapter,
     )

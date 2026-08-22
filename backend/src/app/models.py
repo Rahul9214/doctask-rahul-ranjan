@@ -728,6 +728,15 @@ class ReviewItem(Base):
             name="uq_review_items_id_session_corpus",
         ),
         UniqueConstraint(
+            "id",
+            "review_session_id",
+            "corpus_id",
+            "examination_run_id",
+            "analysis_run_id",
+            "finding_id",
+            name="uq_review_items_id_session_corpus_chain_finding",
+        ),
+        UniqueConstraint(
             "review_session_id",
             "finding_id",
             name="uq_review_items_session_finding",
@@ -852,6 +861,14 @@ class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
     __table_args__ = (
         UniqueConstraint("id", "corpus_id", name="uq_workflow_runs_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "corpus_id",
+            "analysis_run_id",
+            "examination_run_id",
+            "review_session_id",
+            name="uq_workflow_runs_id_corpus_chain",
+        ),
         UniqueConstraint("checkpoint_thread_id", name="uq_workflow_runs_checkpoint_thread_id"),
         ForeignKeyConstraint(
             ["analysis_run_id", "corpus_id"],
@@ -866,9 +883,35 @@ class WorkflowRun(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "examination_runs.id",
+                "examination_runs.corpus_id",
+                "examination_runs.analysis_run_id",
+            ],
+            name="fk_workflow_runs_examination_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["review_session_id", "corpus_id"],
             ["review_sessions.id", "review_sessions.corpus_id"],
             name="fk_workflow_runs_review_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "review_session_id",
+                "corpus_id",
+                "examination_run_id",
+                "analysis_run_id",
+            ],
+            [
+                "review_sessions.id",
+                "review_sessions.corpus_id",
+                "review_sessions.examination_run_id",
+                "review_sessions.analysis_run_id",
+            ],
+            name="fk_workflow_runs_review_chain",
             ondelete="RESTRICT",
         ),
         CheckConstraint(
@@ -1056,6 +1099,14 @@ class CorpusRevision(Base):
     __table_args__ = (
         UniqueConstraint("id", "corpus_id", name="uq_corpus_revisions_id_corpus"),
         UniqueConstraint(
+            "id",
+            "corpus_id",
+            "analysis_run_id",
+            "examination_run_id",
+            "review_session_id",
+            name="uq_corpus_revisions_id_corpus_chain",
+        ),
+        UniqueConstraint(
             "corpus_id",
             "revision_number",
             name="uq_corpus_revisions_corpus_number",
@@ -1073,9 +1124,35 @@ class CorpusRevision(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "examination_runs.id",
+                "examination_runs.corpus_id",
+                "examination_runs.analysis_run_id",
+            ],
+            name="fk_corpus_revisions_examination_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["review_session_id", "corpus_id"],
             ["review_sessions.id", "review_sessions.corpus_id"],
             name="fk_corpus_revisions_review_session_corpus",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "review_session_id",
+                "corpus_id",
+                "examination_run_id",
+                "analysis_run_id",
+            ],
+            [
+                "review_sessions.id",
+                "review_sessions.corpus_id",
+                "review_sessions.examination_run_id",
+                "review_sessions.analysis_run_id",
+            ],
+            name="fk_corpus_revisions_review_chain",
             ondelete="RESTRICT",
         ),
         CheckConstraint("revision_number >= 1", name="ck_corpus_revisions_number"),
@@ -1330,5 +1407,398 @@ class WatcherFile(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PublishedRegister(Base):
+    __tablename__ = "published_registers"
+    __table_args__ = (
+        UniqueConstraint("id", "corpus_id", name="uq_published_registers_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "corpus_id",
+            "review_session_id",
+            "examination_run_id",
+            "analysis_run_id",
+            name="uq_published_registers_id_corpus_chain",
+        ),
+        UniqueConstraint(
+            "corpus_id",
+            "review_session_id",
+            name="uq_published_registers_corpus_session",
+        ),
+        UniqueConstraint(
+            "corpus_id",
+            "publication_number",
+            name="uq_published_registers_corpus_number",
+        ),
+        ForeignKeyConstraint(
+            [
+                "review_session_id",
+                "corpus_id",
+                "examination_run_id",
+                "analysis_run_id",
+            ],
+            [
+                "review_sessions.id",
+                "review_sessions.corpus_id",
+                "review_sessions.examination_run_id",
+                "review_sessions.analysis_run_id",
+            ],
+            name="fk_published_registers_review_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "examination_runs.id",
+                "examination_runs.corpus_id",
+                "examination_runs.analysis_run_id",
+            ],
+            name="fk_published_registers_examination_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "workflow_run_id",
+                "corpus_id",
+                "analysis_run_id",
+                "examination_run_id",
+                "review_session_id",
+            ],
+            [
+                "workflow_runs.id",
+                "workflow_runs.corpus_id",
+                "workflow_runs.analysis_run_id",
+                "workflow_runs.examination_run_id",
+                "workflow_runs.review_session_id",
+            ],
+            name="fk_published_registers_workflow_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "corpus_revision_id",
+                "corpus_id",
+                "analysis_run_id",
+                "examination_run_id",
+                "review_session_id",
+            ],
+            [
+                "corpus_revisions.id",
+                "corpus_revisions.corpus_id",
+                "corpus_revisions.analysis_run_id",
+                "corpus_revisions.examination_run_id",
+                "corpus_revisions.review_session_id",
+            ],
+            name="fk_published_registers_revision_chain",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("publication_number >= 1", name="ck_published_registers_number"),
+        CheckConstraint("status = 'published'", name="ck_published_registers_status"),
+        CheckConstraint(
+            "register_status IN ("
+            "'populated', 'no_findings', 'insufficient_evidence', 'empty_after_review'"
+            ")",
+            name="ck_published_registers_register_status",
+        ),
+        CheckConstraint(
+            "publication_source IN ('api', 'ui')",
+            name="ck_published_registers_source",
+        ),
+        CheckConstraint(
+            "char_length(btrim(actor)) > 0",
+            name="ck_published_registers_actor",
+        ),
+        CheckConstraint(
+            "char_length(content_sha256) = 64",
+            name="ck_published_registers_content_sha256",
+        ),
+        CheckConstraint("applied_count >= 0", name="ck_published_registers_applied"),
+        CheckConstraint("rejected_omitted_count >= 0", name="ck_published_registers_rejected"),
+        CheckConstraint(
+            "pending_optional_omitted_count >= 0",
+            name="ck_published_registers_pending_optional",
+        ),
+        CheckConstraint("edited_count >= 0", name="ck_published_registers_edited"),
+        Index("ix_published_registers_corpus_id", "corpus_id"),
+        Index(
+            "uq_published_registers_current",
+            "corpus_id",
+            unique=True,
+            postgresql_where=text("is_current IS TRUE"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    corpus_id: Mapped[UUID] = mapped_column(
+        ForeignKey("corpora.id", ondelete="RESTRICT"), nullable=False
+    )
+    publication_number: Mapped[int] = mapped_column(Integer)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_session_id: Mapped[UUID] = mapped_column(nullable=False)
+    examination_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    workflow_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    corpus_revision_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="published")
+    register_status: Mapped[str] = mapped_column(String(40))
+    version_identity: Mapped[str] = mapped_column(String(120))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    actor: Mapped[str] = mapped_column(String(100))
+    publication_source: Mapped[str] = mapped_column(String(20), default="api")
+    applied_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_omitted_count: Mapped[int] = mapped_column(Integer, default=0)
+    pending_optional_omitted_count: Mapped[int] = mapped_column(Integer, default=0)
+    edited_count: Mapped[int] = mapped_column(Integer, default=0)
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PublishedRegisterItem(Base):
+    __tablename__ = "published_register_items"
+    __table_args__ = (
+        UniqueConstraint("id", "corpus_id", name="uq_published_register_items_id_corpus"),
+        UniqueConstraint(
+            "id",
+            "published_register_id",
+            "corpus_id",
+            name="uq_published_register_items_id_register_corpus",
+        ),
+        UniqueConstraint(
+            "id",
+            "published_register_id",
+            "corpus_id",
+            "analysis_run_id",
+            name="uq_published_register_items_id_register_corpus_analysis",
+        ),
+        UniqueConstraint(
+            "published_register_id",
+            "review_item_id",
+            name="uq_published_register_items_register_review_item",
+        ),
+        UniqueConstraint(
+            "published_register_id",
+            "rule_id",
+            name="uq_published_register_items_register_rule",
+        ),
+        ForeignKeyConstraint(
+            [
+                "published_register_id",
+                "corpus_id",
+                "review_session_id",
+                "examination_run_id",
+                "analysis_run_id",
+            ],
+            [
+                "published_registers.id",
+                "published_registers.corpus_id",
+                "published_registers.review_session_id",
+                "published_registers.examination_run_id",
+                "published_registers.analysis_run_id",
+            ],
+            name="fk_published_register_items_register_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "review_item_id",
+                "review_session_id",
+                "corpus_id",
+                "examination_run_id",
+                "analysis_run_id",
+                "finding_id",
+            ],
+            [
+                "review_items.id",
+                "review_items.review_session_id",
+                "review_items.corpus_id",
+                "review_items.examination_run_id",
+                "review_items.analysis_run_id",
+                "review_items.finding_id",
+            ],
+            name="fk_published_register_items_review_item_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["finding_id", "examination_run_id", "corpus_id", "analysis_run_id"],
+            [
+                "findings.id",
+                "findings.examination_run_id",
+                "findings.corpus_id",
+                "findings.analysis_run_id",
+            ],
+            name="fk_published_register_items_finding_chain",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "review_status IN ('approved', 'edited')",
+            name="ck_published_register_items_review_status",
+        ),
+        CheckConstraint(
+            "content_origin IN ('system_grounded', 'mixed')",
+            name="ck_published_register_items_content_origin",
+        ),
+        CheckConstraint(
+            "outcome IN ('pass', 'fail', 'warning', 'unknown')",
+            name="ck_published_register_items_outcome",
+        ),
+        CheckConstraint(
+            "(review_status = 'approved' AND content_origin = 'system_grounded' AND "
+            "reviewer_authored_content IS NULL) OR "
+            "(review_status = 'edited' AND content_origin = 'mixed' AND "
+            "reviewer_authored_content IS NOT NULL AND "
+            "char_length(btrim(reviewer_authored_content)) > 0 AND "
+            "reviewer_authored_acknowledged IS TRUE)",
+            name="ck_published_register_items_authorship",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(structured_reason) = 'object'",
+            name="ck_published_register_items_reason_object",
+        ),
+        CheckConstraint(
+            "char_length(value_hash) = 64",
+            name="ck_published_register_items_value_hash",
+        ),
+        Index("ix_published_register_items_corpus_id", "corpus_id"),
+        Index("ix_published_register_items_register_id", "published_register_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    published_register_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_session_id: Mapped[UUID] = mapped_column(nullable=False)
+    review_item_id: Mapped[UUID] = mapped_column(nullable=False)
+    examination_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    finding_id: Mapped[UUID] = mapped_column(nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(100))
+    rule_version: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(200))
+    message: Mapped[str] = mapped_column(Text)
+    structured_reason: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    evidence_kind: Mapped[str] = mapped_column(String(40))
+    review_status: Mapped[str] = mapped_column(String(20))
+    content_origin: Mapped[str] = mapped_column(String(40))
+    reviewer_authored_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer_authored_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    value_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PublishedRegisterItemFact(Base):
+    __tablename__ = "published_register_item_facts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["published_item_id", "published_register_id", "corpus_id", "analysis_run_id"],
+            [
+                "published_register_items.id",
+                "published_register_items.published_register_id",
+                "published_register_items.corpus_id",
+                "published_register_items.analysis_run_id",
+            ],
+            name="fk_published_item_facts_item_register_corpus_analysis",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["fact_id", "analysis_run_id", "corpus_id"],
+            ["facts.id", "facts.run_id", "facts.corpus_id"],
+            name="fk_published_item_facts_fact_run_corpus",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "published_item_id",
+            "fact_id",
+            name="uq_published_item_facts_item_fact",
+        ),
+        Index("ix_published_item_facts_item_id", "published_item_id"),
+        Index("ix_published_item_facts_fact_id", "fact_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    published_item_id: Mapped[UUID] = mapped_column(nullable=False)
+    published_register_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
+class PublishedRegisterItemContradiction(Base):
+    __tablename__ = "published_register_item_contradictions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["published_item_id", "published_register_id", "corpus_id", "analysis_run_id"],
+            [
+                "published_register_items.id",
+                "published_register_items.published_register_id",
+                "published_register_items.corpus_id",
+                "published_register_items.analysis_run_id",
+            ],
+            name="fk_published_item_contradictions_item_register_analysis",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["contradiction_id", "analysis_run_id", "corpus_id"],
+            ["contradictions.id", "contradictions.run_id", "contradictions.corpus_id"],
+            name="fk_published_item_contradictions_contradiction",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "published_item_id",
+            "contradiction_id",
+            name="uq_published_item_contradictions_item_contradiction",
+        ),
+        Index("ix_published_item_contradictions_item_id", "published_item_id"),
+        Index("ix_published_item_contradictions_contradiction_id", "contradiction_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    published_item_id: Mapped[UUID] = mapped_column(nullable=False)
+    published_register_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    analysis_run_id: Mapped[UUID] = mapped_column(nullable=False)
+    contradiction_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
+class PublicationEvent(Base):
+    __tablename__ = "publication_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["published_register_id", "corpus_id"],
+            ["published_registers.id", "published_registers.corpus_id"],
+            name="fk_publication_events_register_corpus",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "event_type IN ("
+            "'published', 'item_applied', 'item_applied_with_reviewer_edit', "
+            "'item_omitted_rejected', 'item_omitted_pending_optional'"
+            ")",
+            name="ck_publication_events_type",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(payload) = 'object'",
+            name="ck_publication_events_payload_object",
+        ),
+        Index("ix_publication_events_corpus_id", "corpus_id"),
+        Index("ix_publication_events_register_id", "published_register_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    published_register_id: Mapped[UUID] = mapped_column(nullable=False)
+    corpus_id: Mapped[UUID] = mapped_column(nullable=False)
+    event_type: Mapped[str] = mapped_column(String(60))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    actor: Mapped[str] = mapped_column(String(100))
+    publication_source: Mapped[str] = mapped_column(String(20), default="api")
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

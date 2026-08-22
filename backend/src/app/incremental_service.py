@@ -76,8 +76,6 @@ from app.review_service import ReviewService
 from app.ruleset import (
     EXAMINE_GRAPH_VERSION,
     OPEN_CONTRADICTION_RULE_ID,
-    RULES,
-    RULESET_VERSION,
     UnderstandingView,
     citations_for,
     evaluate_open_contradictions,
@@ -387,7 +385,7 @@ class IncrementalService:
             baseline.taxonomy_version == TAXONOMY_VERSION
             and baseline.understand_graph_version == GRAPH_VERSION
             and baseline.prompt_config_version == PROMPT_CONFIG_VERSION
-            and baseline.ruleset_version == RULESET_VERSION
+            and baseline.ruleset_version == self.examine.ruleset.version
             and baseline.examine_graph_version == EXAMINE_GRAPH_VERSION
         )
         impact = plan_impact(
@@ -395,6 +393,7 @@ class IncrementalService:
             facts=fact_refs,
             contradictions=contradiction_refs,
             block_ids_by_version=block_ids_by_version,
+            rules=self.examine.ruleset.rules,
         )
         if not versions_match:
             impact = ImpactSet(
@@ -402,7 +401,7 @@ class IncrementalService:
                 reused_fact_ids=frozenset(),
                 affected_contradiction_ids=frozenset(item.id for item in contradictions),
                 reused_contradiction_ids=frozenset(),
-                affected_rule_ids=frozenset(rule.rule_id for rule in RULES),
+                affected_rule_ids=frozenset(rule.rule_id for rule in self.examine.ruleset.rules),
                 reused_rule_ids=frozenset(),
                 affected_block_ids=impact.affected_block_ids,
                 affected_keys=frozenset((fact.category, fact.subject_key) for fact in facts),
@@ -643,6 +642,7 @@ class IncrementalService:
                     | {item.source_version_id for item in changes.added}
                     | changes.retired_source_version_ids,
                 ),
+                rules=self.examine.ruleset.rules,
                 extracted_facts=extracted_refs,
             )
         reused_facts, fact_id_map, fact_hashes = _copy_reused_facts(
@@ -754,7 +754,7 @@ class IncrementalService:
             analysis_run_id=analysis_run.id,
             status="running",
             findings_status="pending",
-            ruleset_version=RULESET_VERSION,
+            ruleset_version=self.examine.ruleset.version,
             graph_version=EXAMINE_GRAPH_VERSION,
             started_at=utcnow(),
             configuration={
@@ -771,7 +771,7 @@ class IncrementalService:
         new_facts = await self.understand.list_facts(corpus_id, analysis_run.id)
         new_contradictions = await self.understand.list_contradictions(corpus_id, analysis_run.id)
         view = _understanding_view(new_facts, new_contradictions, attested=True)
-        selected = select_rules(view)
+        selected = select_rules(view, self.examine.ruleset.rules)
         selected_ids = [rule.rule_id for rule in selected]
         reused_findings: list[dict[str, object]] = []
         recomputed_findings: list[dict[str, object]] = []
@@ -802,7 +802,11 @@ class IncrementalService:
             for payload in specific_results
             for item_id in _as_str_list(payload.get("contradiction_ids"))
         }
-        open_rule = next(rule for rule in RULES if rule.rule_id == OPEN_CONTRADICTION_RULE_ID)
+        open_rule = next(
+            rule
+            for rule in self.examine.ruleset.rules
+            if rule.rule_id == OPEN_CONTRADICTION_RULE_ID
+        )
         if OPEN_CONTRADICTION_RULE_ID in selected_ids:
             if (
                 OPEN_CONTRADICTION_RULE_ID in impact.reused_rule_ids
@@ -1054,7 +1058,7 @@ class IncrementalService:
             taxonomy_version=TAXONOMY_VERSION,
             understand_graph_version=GRAPH_VERSION,
             prompt_config_version=PROMPT_CONFIG_VERSION,
-            ruleset_version=RULESET_VERSION,
+            ruleset_version=self.examine.ruleset.version,
             examine_graph_version=EXAMINE_GRAPH_VERSION,
             configuration={
                 "incremental_graph_version": INCREMENTAL_GRAPH_VERSION,

@@ -21,6 +21,7 @@ from app.model_gateway import (
 from app.models import Corpus
 from app.operation_ledger import default_identity_versions
 from app.parsers import SourceFormat
+from app.publication_service import PublicationService
 from app.review_service import ReviewService
 from app.schemas import ReviewDecisionCreate
 from app.services import IngestionResult, Phase02Service
@@ -242,6 +243,74 @@ class CountingModelAdapter:
         batch = await self.inner.extract_facts(blocks)
         usage = batch.usage.model_copy(update={"operation_count": 1, "attempt_count": 1})
         return batch.model_copy(update={"usage": usage})
+
+
+def make_publication(
+    phase02: Phase02Service,
+    adapter: ModelAdapter | None = None,
+    review: ReviewService | None = None,
+) -> PublicationService:
+    resolved = review or make_review(phase02, adapter)
+    return PublicationService(
+        phase02.session_factory,
+        phase02,
+        resolved,
+        resolved.examine,
+    )
+
+
+async def mixed_review_then_complete(
+    review: ReviewService,
+    corpus_id: UUID,
+    session_id: UUID,
+) -> tuple[str, str, str]:
+    """Approve one required item, reject one, edit one, approve remaining required items."""
+
+    items = await review.list_items(corpus_id, session_id)
+    required = [item for item in items if item.review_required]
+    approve_id = required[0].rule_id if required else ""
+    reject_id = required[1].rule_id if len(required) > 1 else ""
+    edit_id = required[-1].rule_id if len(required) > 2 else ""
+    if required:
+        await review.record_decision(
+            corpus_id,
+            session_id,
+            required[0].id,
+            ReviewDecisionCreate(action="approve", decision_source="api", comment="Approve"),
+        )
+    if len(required) > 1:
+        await review.record_decision(
+            corpus_id,
+            session_id,
+            required[1].id,
+            ReviewDecisionCreate(action="reject", decision_source="api", comment="Reject"),
+        )
+    if len(required) > 2:
+        await review.record_decision(
+            corpus_id,
+            session_id,
+            required[-1].id,
+            ReviewDecisionCreate(
+                action="edit",
+                edited_content=(
+                    "Reviewer-authored restatement distinguished from grounded evidence."
+                ),
+                reviewer_authored_acknowledged=True,
+                decision_source="api",
+                comment="Edit",
+            ),
+        )
+    remaining = await review.list_items(corpus_id, session_id)
+    for item in remaining:
+        if item.review_required and item.review_status == "pending":
+            await review.record_decision(
+                corpus_id,
+                session_id,
+                item.id,
+                ReviewDecisionCreate(action="approve", decision_source="api"),
+            )
+    await review.complete_session(corpus_id, session_id)
+    return approve_id, reject_id, edit_id
 
 
 async def complete_required_review(

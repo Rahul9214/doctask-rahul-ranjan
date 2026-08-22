@@ -2,7 +2,94 @@
 
 ## Current state
 
-- **Current phase:** Phase 09 — Hardening — local initial PASS on `feat/phase-09-hardening`;
+- **Current phase:** Phase 10 — Final Delivery — local implementation on
+  `feat/phase-10-deployment-submission`. Do not mark independent PASS.
+- **Implementation status:** Phase 01–09 application plus explicit approved-only register
+  publication, concurrent publication isolation, stage usage/cost reporting, versioned ruleset
+  JSON configuration, and local Compose delivery. Hosted cloud is not implemented.
+- **Application capabilities implemented:** all Phase 01–09 capabilities, plus
+  `PublicationService` / Alembic `20260822_0008` published-register tables, HTTP and MCP
+  publish/get register, compact React register panel, `GET .../usage`, and
+  `software-project-assurance.v1.json` loaded as configuration.
+- **Git write operations performed by the agent:** none
+- **Phase 10 status:** local initial implementation PASS was followed by independent **FAIL /
+  NO-GO** and correction work. The latest configured local backend and runtime verification pass;
+  independent final Phase 10 verification remains pending. Do not mark independent PASS.
+
+## Phase 10 record — 2026-08-22
+
+Phase 10 implements remaining TASK items without redesigning Phases 01–09.
+
+Publication contract: completed review → explicit publish → immutable register. Understand,
+Examine, workflow `completed`, and MCP `complete_review` do not publish. Applied items are
+approved (SYSTEM-GROUNDED) and edited (MIXED). Rejected items are omitted. Pending optional PASS
+is omitted, not approved. Empty corpus publishes `no_findings`. UNKNOWN stays UNKNOWN. Aurora
+production-readiness keeps both cited dates when approved.
+
+Local backend gate: ruff/mypy PASS; pytest 229 passed; coverage 91.24%; `uv build` 1.0.0.
+Frontend: format/lint/typecheck/17 tests/build PASS.
+Clean Docker: `down -v` (disposable demo volumes), build, `up --detach`; health/ready/version
+1.0.0; Alembic `20260822_0008`; MCP 20 tools; live Aurora+Harbor publish; backend restart
+preserved registers. New volumes retained after the proof.
+
+No Git writes.
+
+## Phase 10 independent FAIL / NO-GO and correction — 2026-08-22
+
+The independent Phase 10 verification rejected the initial local PASS. The critical blocker was
+that final `PublicationService` trusted persisted fact/citation state instead of re-running Phase
+02 exact citation validation and Phase 03 assertion grounding. Related findings were incomplete
+same-chain publication constraints, `RULESET_PATH` not injected into actual runtime Examine,
+status-only live acceptance, Harbor MCP publishing before workflow resume, overlapping nested
+duration totals, ambiguous edited-evidence UI, and stale current-state documentation.
+
+The local correction reuses the existing Examine evidence boundary before any authoritative
+register write, including independent validation of both contradiction sides; adds publication
+tamper and database-integrity tests; injects a runtime-loaded ruleset instance; validates live
+register content; resumes Harbor through stdio MCP before publish; totals only outer workflow
+durations; and separates system-grounded originals from reviewer-authored edits.
+
+Historical blocked correction run: PostgreSQL was unavailable, so 119 tests passed and 117
+database-dependent tests skipped; coverage was 50.21% and failed the 90% gate. Frontend
+format/lint/typecheck, 17 tests, production build, backend package build, and
+`docker compose config` passed. Migration, configured integration/MCP, live HTTP, restart, and
+Docker image/runtime gates were blocked. The local correction therefore remained **NO-GO** at
+that point.
+
+Later configured backend verification used `DATABASE_URL`, `TEST_DATABASE_URL`, and
+`ALLOW_DESTRUCTIVE_TEST_DATABASE=true`: 238 tests collected, 238 passed, 0 failed, with 91.29%
+coverage. Ruff format/lint, mypy, and backend package build `1.0.0` passed. This is the current
+final local backend result; independent PASS is not claimed.
+
+Final local runtime verification then passed: backend package build `1.0.0`, backend Docker image
+build, and frontend Docker image build; database/backend/frontend healthy; `/health` returned
+`alive`; `/ready` returned `ready`; `/version` returned `1.0.0` / `Phase 10 — Final Delivery`;
+Alembic reported `20260822_0008 (head)`; MCP probe reported 20 tools with
+`expected_present=true`; and `scripts/final_runtime_acceptance.py` passed. Aurora published
+`register_status=populated`, `applied_count=3`, omitted rejected
+`spa.ownership.budget`, and reported deterministic zero cost basis. Harbor published
+`register_status=insufficient_evidence`, `applied_count=3`, omitted rejected
+`spa.dependency.evidence`, and reported deterministic zero cost basis. Cross-corpus register access
+was denied. Backend restart and `/ready` after restart passed. Run/publication UUIDs are
+sample-specific and are not recorded as stable evidence.
+
+## Phase 10 migration recovery history — 2026-08-22
+
+The local application database had already been stamped with an older form of the still-uncommitted
+`20260822_0008` schema. The corrected downgrade initially attempted to drop the newly added
+`fk_corpus_revisions_review_chain`; PostgreSQL rejected the downgrade because that constraint did
+not exist in the older applied schema.
+
+The correction audited every potentially absent Phase 10 correction constraint and uses
+PostgreSQL-safe `DROP CONSTRAINT IF EXISTS` where required. Downgrade order removes child/evidence
+constraints and tables first, publication objects next, and Phase 01–07 correction foreign keys
+and unique constraints last. Recovery `0008 → 0007 → corrected 0008` succeeded while preserving
+pre-Phase-10 data. Final PostgreSQL metadata verification reported
+`verified_constraints=20`, `missing=[]`.
+
+## Phase 09 record retained below
+
+- **Current phase (historical):** Phase 09 — Hardening — local initial PASS on `feat/phase-09-hardening`;
   independent verification FAIL / NO-GO; local correction PASS; independent re-verification
   NO-GO; local final correction PASS below. Do not mark independent PASS. Do not begin
   Phase 10 deployment/final submission.

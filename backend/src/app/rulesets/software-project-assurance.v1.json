@@ -1,0 +1,160 @@
+{
+  "ruleset_version": "software-project-assurance.v1",
+  "rule_version": "1",
+  "rules": [
+    {
+      "rule_id": "spa.ownership.sponsor",
+      "version": "1",
+      "title": "Project sponsor is identified",
+      "category": "owner_accountability",
+      "severity": "high",
+      "description": "A supported project sponsor must be named; silence is not accountability.",
+      "evaluator": "required_assigned_owner",
+      "required_fact_categories": ["owner_accountability"],
+      "required_subject_keys": ["project_sponsor"],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "owner_accountability",
+        "subject_key": "project_sponsor"
+      }
+    },
+    {
+      "rule_id": "spa.ownership.delivery-lead",
+      "version": "1",
+      "title": "Delivery lead is identified",
+      "category": "owner_accountability",
+      "severity": "high",
+      "description": "A supported delivery lead must be named.",
+      "evaluator": "required_assigned_owner",
+      "required_fact_categories": ["owner_accountability"],
+      "required_subject_keys": ["delivery_lead"],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "owner_accountability",
+        "subject_key": "delivery_lead"
+      }
+    },
+    {
+      "rule_id": "spa.status.clarity",
+      "version": "1",
+      "title": "Project status is explicit",
+      "category": "status",
+      "severity": "medium",
+      "description": "Overall status must be grounded. Amber is a warning; red is a failure.",
+      "evaluator": "mapped_supported_value",
+      "required_fact_categories": ["status"],
+      "required_subject_keys": ["overall_status"],
+      "consumes_contradictions": true,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "status",
+        "subject_key": "overall_status",
+        "value_outcomes": {
+          "green": "pass",
+          "amber": "warning",
+          "red": "fail"
+        },
+        "unmapped_outcome": "warning"
+      }
+    },
+    {
+      "rule_id": "spa.milestone.production-readiness",
+      "version": "1",
+      "title": "Production-readiness date is consistent",
+      "category": "milestone_date",
+      "severity": "high",
+      "description": "Conflicting grounded production-readiness dates fail; missing dates are unknown.",
+      "evaluator": "subject_contradiction",
+      "required_fact_categories": ["milestone_date"],
+      "required_subject_keys": ["production_readiness"],
+      "consumes_contradictions": true,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "milestone_date",
+        "subject_key": "production_readiness"
+      }
+    },
+    {
+      "rule_id": "spa.ownership.security-signoff",
+      "version": "1",
+      "title": "Security sign-off owner is assigned",
+      "category": "owner_accountability",
+      "severity": "high",
+      "description": "Security sign-off ownership must be a named person, not unassigned or absent.",
+      "evaluator": "required_assigned_owner",
+      "required_fact_categories": ["owner_accountability"],
+      "required_subject_keys": ["security_signoff_owner"],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "owner_accountability",
+        "subject_key": "security_signoff_owner"
+      }
+    },
+    {
+      "rule_id": "spa.ownership.budget",
+      "version": "1",
+      "title": "Budget owner is identified",
+      "category": "owner_accountability",
+      "severity": "medium",
+      "description": "A supported budget owner is required; missing evidence stays unknown.",
+      "evaluator": "required_assigned_owner",
+      "required_fact_categories": ["owner_accountability"],
+      "required_subject_keys": ["budget_owner"],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "category": "owner_accountability",
+        "subject_key": "budget_owner"
+      }
+    },
+    {
+      "rule_id": "spa.dependency.evidence",
+      "version": "1",
+      "title": "Dependency evidence is recorded",
+      "category": "dependency",
+      "severity": "medium",
+      "description": "At least one supported dependency fact is required.",
+      "evaluator": "required_supported_category",
+      "required_fact_categories": ["dependency"],
+      "required_subject_keys": [],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "categories": ["dependency"]
+      }
+    },
+    {
+      "rule_id": "spa.control.assurance",
+      "version": "1",
+      "title": "Assurance or control evidence is recorded",
+      "category": "control_assurance",
+      "severity": "medium",
+      "description": "At least one supported control or assurance fact is required.",
+      "evaluator": "required_supported_category",
+      "required_fact_categories": ["control_assurance"],
+      "required_subject_keys": [],
+      "consumes_contradictions": false,
+      "unknown_behavior": "unknown_if_missing",
+      "configuration": {
+        "categories": ["control_assurance"]
+      }
+    },
+    {
+      "rule_id": "spa.contradiction.open",
+      "version": "1",
+      "title": "Open grounded contradictions",
+      "category": "contradiction",
+      "severity": "high",
+      "description": "Remaining open Phase 03 contradictions that were not consumed by a more specific rule fail. Zero remaining contradictions PASS only with a same-run completed detect_contradictions attestation; otherwise UNKNOWN. Unrelated supported facts are never attached as evidence.",
+      "evaluator": "open_contradictions",
+      "required_fact_categories": [],
+      "required_subject_keys": [],
+      "consumes_contradictions": true,
+      "unknown_behavior": "unknown_unless_attested_zero",
+      "configuration": {}
+    }
+  ]
+}

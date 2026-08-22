@@ -30,8 +30,8 @@ services:
       context: ./backend
     environment:
       APP_NAME: Project Assurance Register
-      APP_VERSION: 0.9.0
-      CURRENT_PHASE: Phase 09 — Hardening
+      APP_VERSION: 1.0.0
+      CURRENT_PHASE: Phase 10 — Final Delivery
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-project_assurance}:${POSTGRES_PASSWORD:-local_only}@db:5432/${POSTGRES_DB:-project_assurance}
       SOURCE_STORAGE_PATH: /data/source-files
       WATCH_INPUT_PATH: /data/watch-inbox
@@ -40,6 +40,7 @@ services:
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
       READINESS_TIMEOUT_SECONDS: 5
       MODEL_PROVIDER: deterministic
+      RULESET_PATH: ${RULESET_PATH:-}
     volumes:
       - source_files:/data/source-files
       - watch_inbox:/data/watch-inbox
