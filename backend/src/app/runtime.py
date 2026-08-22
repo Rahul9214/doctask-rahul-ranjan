@@ -11,7 +11,9 @@ from app.db import SessionFactory, create_engine, create_session_factory
 from app.examine_service import ExamineService
 from app.incremental_service import IncrementalService
 from app.model_gateway import ModelAdapter, create_model_adapter
+from app.publication_service import PublicationService
 from app.review_service import ReviewService
+from app.ruleset import load_ruleset_config
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
 from app.understand_service import UnderstandService
@@ -32,6 +34,7 @@ class ApplicationServices:
     review: ReviewService
     workflow: WorkflowService
     incremental: IncrementalService
+    publication: PublicationService
     watcher: WatcherService | None
     model_adapter: ModelAdapter
 
@@ -50,6 +53,7 @@ def build_application_services(
     review_service: ReviewService | None = None,
     workflow_service: WorkflowService | None = None,
     incremental_service: IncrementalService | None = None,
+    publication_service: PublicationService | None = None,
     watcher_service: WatcherService | None = None,
     model_adapter: ModelAdapter | None = None,
     include_watcher: bool = True,
@@ -72,6 +76,7 @@ def build_application_services(
         resolved_phase02.session_factory,
         resolved_phase02,
         resolved_understand,
+        load_ruleset_config(app_settings.ruleset_path),
     )
     resolved_review = review_service or ReviewService(
         resolved_phase02.session_factory,
@@ -85,6 +90,12 @@ def build_application_services(
         resolved_review,
         adapter,
         app_settings,
+    )
+    resolved_publication = publication_service or PublicationService(
+        resolved_phase02.session_factory,
+        resolved_phase02,
+        resolved_review,
+        resolved_examine,
     )
     resolved_incremental = incremental_service or IncrementalService(
         resolved_phase02.session_factory,
@@ -115,6 +126,7 @@ def build_application_services(
         review=resolved_review,
         workflow=resolved_workflow,
         incremental=resolved_incremental,
+        publication=resolved_publication,
         watcher=resolved_watcher,
         model_adapter=adapter,
     )

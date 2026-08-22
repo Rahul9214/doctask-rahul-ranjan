@@ -190,7 +190,7 @@ async def test_populated_0007_downgrade_preserves_workflow_owned_ledger_rows(
         assert int(null_workflow_after or 0) == 0
         assert version == "20260819_0006"
     finally:
-        _migrate("upgrade", "20260819_0007")
+        _migrate("upgrade", "head")
         async with incremental.session_factory() as session:
             restored = await session.scalar(text("SELECT version_num FROM alembic_version"))
             surviving_after_upgrade = list(
@@ -198,7 +198,7 @@ async def test_populated_0007_downgrade_preserves_workflow_owned_ledger_rows(
                     select(DurableOperation).where(DurableOperation.id.in_(workflow_owned_ids))
                 )
             )
-        assert restored == "20260819_0007"
+        assert restored == "20260822_0008"
         assert {row.id for row in surviving_after_upgrade} == workflow_owned_ids
         assert all(row.workflow_run_id == workflow_run.id for row in surviving_after_upgrade)
         assert all(row.incremental_run_id is None for row in surviving_after_upgrade)

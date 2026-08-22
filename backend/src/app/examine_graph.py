@@ -27,12 +27,12 @@ from app.models import (
 )
 from app.ruleset import (
     EXAMINE_GRAPH_VERSION,
-    RULESET_VERSION,
     EvidenceKind,
     GroundedContradictionView,
     GroundedFactView,
     Outcome,
     RuleEvaluation,
+    RulesetConfig,
     UnderstandingView,
     evaluate_rules,
     select_rules,
@@ -70,9 +70,16 @@ def utcnow() -> datetime:
 
 
 class ExamineWorkflow:
-    def __init__(self, *, session_factory: SessionFactory, phase02: Phase02Service) -> None:
+    def __init__(
+        self,
+        *,
+        session_factory: SessionFactory,
+        phase02: Phase02Service,
+        ruleset: RulesetConfig,
+    ) -> None:
         self.session_factory = session_factory
         self.phase02 = phase02
+        self.ruleset = ruleset
         graph = StateGraph(ExamineState)
         graph.add_node("load_understanding", self.load_understanding)
         graph.add_node("select_rules", self.select_rules_node)
@@ -195,7 +202,7 @@ class ExamineWorkflow:
             await self._record_skip(run_id, corpus_id, "select_rules", started, perf)
             return {"selected_rule_ids": []}
         view = _view_from_payload(state.get("understanding", {}))
-        selected = select_rules(view)
+        selected = select_rules(view, self.ruleset.rules)
         skip_reason = "no_applicable_evidence" if not selected else None
         status = "skipped" if skip_reason else "completed"
         await self._record_stage(
@@ -230,7 +237,11 @@ class ExamineWorkflow:
             )
             return {"findings": []}
         view = _view_from_payload(state.get("understanding", {}))
-        selected = [rule for rule in select_rules(view) if rule.rule_id in set(selected_ids)]
+        selected = [
+            rule
+            for rule in select_rules(view, self.ruleset.rules)
+            if rule.rule_id in set(selected_ids)
+        ]
         evaluations = evaluate_rules(view, selected)
         await self._record_stage(
             run_id,
@@ -257,7 +268,7 @@ class ExamineWorkflow:
         untrusted_ids = _untrusted_block_ids(state.get("understanding", {}))
         for raw in findings:
             evaluation = _evaluation_from_payload(raw)
-            reason = validate_evaluation(evaluation, view)
+            reason = validate_evaluation(evaluation, view, self.ruleset.rules_by_id)
             if reason is not None:
                 error = ValidationError(
                     "examination_evidence_invalid",
@@ -316,7 +327,7 @@ class ExamineWorkflow:
         untrusted_ids = _untrusted_block_ids({"classifications": list(classifications)})
         for raw in findings:
             evaluation = _evaluation_from_payload(raw)
-            reason = validate_evaluation(evaluation, view)
+            reason = validate_evaluation(evaluation, view, self.ruleset.rules_by_id)
             if reason is not None:
                 raise ValidationError(
                     "examination_evidence_invalid",
@@ -457,7 +468,7 @@ class ExamineWorkflow:
                 "no_findings": findings_status == "no_findings",
                 "selected_rule_ids": state.get("selected_rule_ids", []),
                 "summary": summary,
-                "ruleset_version": RULESET_VERSION,
+                "ruleset_version": self.ruleset.version,
                 "graph_version": EXAMINE_GRAPH_VERSION,
             }
         await self._record_stage(

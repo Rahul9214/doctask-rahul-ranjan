@@ -2,32 +2,25 @@
 
 ## Status
 
-**Phase 01 foundation, Phase 02 deterministic ingestion/provenance, Phase 03 Understand, Phase 04
-Examine, Phase 05 item-level human review, Phase 06 durable resume, Phase 07 focused incremental
-updates, Phase 08 MCP business operations, and Phase 09 adversarial hardening are implemented.**
+**Phase 01–09 remain the implemented application core. Phase 10 adds explicit approved-only
+register publication, concurrent publication isolation, stage usage/cost reporting, ruleset JSON
+configuration, and reproducible Compose delivery. Application version is 1.0.0.**
 Independent Phase 03 FAIL (grounding)
 and follow-up NO-GO remain historical record. Phase 03 current status is independent final follow-up
-GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04 and Phase 05 independent
-FAIL / NO-GO remain historical. Phase 06 initial local implementation PASS; independent verification
-FAIL / NO-GO; later exclusive retry-allowlist correction is implemented locally and is not
-independently re-verified. Phase 07 is a local implementation PASS and is not independently
-re-verified. Phase 08 original local implementation PASS was independently FAIL / NO-GO; a local
-correction for the MCP error boundary, stderr logging, input-limit parity, and resume UI is
-implemented and is not independently re-verified. Phase 09 had a local hardening PASS on
-`feat/phase-09-hardening`, then independent verification FAIL / NO-GO; a local correction
-pass follows and is not independently re-verified. Alembic head remains
-`20260819_0007`; no Phase 09 schema migration was added. Examine
+GO: committed, PR #3 merged to `main` as `ceb2bf0`, remote CI PASS. Phase 04–09 independent
+FAIL / NO-GO records remain historical in `PROGRESS.md`. Alembic head is `20260822_0008`. Examine
 consumes grounded Phase 03 records and revalidates Phase 02 provenance before persisting definitive
 findings. Human review creates an explicit `WAITING_FOR_REVIEW` session from a completed examination
-and records item-level approve/reject/edit decisions without publishing a register. Durable workflow
+and records item-level approve/reject/edit decisions. Publication is a later, explicit action after
+that session is completed; workflow `completed` is not published. Durable workflow
 runs coordinate those stages with PostgreSQL LangGraph checkpoints, a session-level same-run
 execution lock, an operation ledger, and process-kill resume. Incremental runs detect SHA-256
 source-version changes against a durable corpus revision, recompute only provenance-affected work,
 reuse unaffected artifacts with canonical unchanged-byte proof, and persist executed-versus-reused
-operation evidence. MCP is a stdio process role over the same `ApplicationServices` as FastAPI.
+operation evidence. MCP is a stdio process role over the same `ApplicationServices` as FastAPI,
+including publication tools that call `PublicationService`.
 
-Register publication and production deployment remain planned. Implementation evidence may simplify
-or revise those plans; revisions are recorded in `PROGRESS.md`.
+Hosted cloud deployment is not implemented. Local Compose is the supported runtime.
 
 ## Design goals
 
@@ -47,7 +40,7 @@ It does not exist to demonstrate infrastructure breadth.
 
 The explicit non-cuttable floor is limited to behaviors 1–5: visible path-changing stages, durable resume, item-level human review, machine-driven flow, and no-bluffing. Understand, examine, and stay alive must each remain genuinely represented, but detailed sub-features inside the movements may be cut with explicit rationale.
 
-One-command stranger setup, real keyless tests, document prompt-injection defense, concurrent isolation, and stage timing/cost are behaviors 6–10. Each is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.** Phase 06 implements same-corpus workflow-run isolation, keyless kill/resume proof, and raw run-event timing/cost fields. Phase 07 implements focused incremental stay-alive with executable no-full-rerun proof. Concurrent publication, one-command stranger-setup polish, and production authentication remain later.
+Behaviors 6–10 are strong differentiators. Phase 06 implements same-corpus workflow-run isolation and keyless kill/resume. Phase 07 implements focused incremental stay-alive with executable no-full-rerun proof. Phase 09 implements prompt-injection defense. Phase 10 implements one-command Compose startup, concurrent publication isolation, and aggregated stage timing/usage/honest cost. Production authentication remains out of scope.
 
 ## Stack classification
 
@@ -79,6 +72,9 @@ flowchart LR
     Services --> P5[ReviewService]
     Services --> P6[WorkflowService]
     Services --> P7[IncrementalService]
+    Services --> P10[PublicationService]
+    P10 --> P5
+    P10 --> DB
     API --> Watch[StableFileWatcher]
     P6 --> DurableGraph[LangGraphDurableWorkflow]
     DurableGraph --> P3
@@ -110,8 +106,9 @@ flowchart LR
 - Nginx serves immutable Vite production assets and proxies `/api/*` to FastAPI.
 - FastAPI owns liveness/readiness/version plus corpus, source, citation, retrieval, Understand
   analysis-run, Examine examination-run, human-review, durable workflow-run, corpus-revision, and
-  incremental-run routes. `GET /corpora` lists corpora with an optional exact name filter.
-  `POST /watcher/poll` is available when `WATCH_INPUT_PATH` is set.
+  incremental-run, publication, and workflow-usage routes. `GET /corpora` lists corpora with an
+  optional exact name filter. `POST /watcher/poll` is available when `WATCH_INPUT_PATH` is set.
+  `POST .../publish` is the only publication mutation.
 - The MCP stdio server is a second process role. It constructs the same `ApplicationServices`
   (`include_watcher=False`) and registers typed tools that call those services. It does not own a
   second review/workflow implementation.
@@ -125,7 +122,10 @@ flowchart LR
   `20260819_0005` creates `review_sessions`, `review_items`, and `review_decisions`;
   `20260819_0006` creates `workflow_runs`, `durable_operations`, `workflow_run_events`, and
   LangGraph checkpoint tables; `20260819_0007` creates `corpus_revisions`, `incremental_runs`,
-  `incremental_artifact_evidence`, and `watcher_files`. Phase 08 and Phase 09 add no schema revision.
+  `incremental_artifact_evidence`, and `watcher_files`; `20260822_0008` creates
+  `published_registers`, `published_register_items`, `published_register_item_facts`,
+  `published_register_item_contradictions`, and `publication_events`. Phase 08 and Phase 09 add no
+  schema revision.
 - Compose orders startup by health: database, migrating backend, then frontend.
 - Default `MODEL_PROVIDER=deterministic` requires no API key. The single live provider is
   OpenAI-compatible chat completions, selected only by environment.
@@ -247,13 +247,14 @@ Implemented now:
 - create and inspect review sessions, enumerate review items with grounded evidence, record
   explicit item-level approve/reject/edit decisions under row-level transactional locking, and
   complete a session only after required items have terminal decisions;
-- start, inspect, and resume corpus-scoped durable workflow runs, including event listing;
+- start, inspect, and resume corpus-scoped durable workflow runs, including event listing and
+  per-stage usage/cost;
+- publish an approved-only register after a completed same-corpus review session, and inspect
+  current or historical publications;
 - list corpora (`GET /corpora`) with an optional exact name filter.
 
-Later planned responsibilities:
-
-- publish approved-only register versions;
-- serve immutable source snippets/locators safely.
+Not implemented: internet-facing authentication; hosted cloud; serving raw source files as a
+public CDN.
 
 ### MCP server
 
@@ -264,11 +265,12 @@ Implemented in Phase 08 as a thin stdio adapter (`python -m app.mcp_server`) ove
 - start, inspect, and resume durable workflow runs;
 - inspect understanding, examination findings, review items, current revision, and incremental
   evidence;
-- submit explicit approve/reject/edit decisions and complete a review session.
+- submit explicit approve/reject/edit decisions and complete a review session;
+- publish and inspect registers through `PublicationService` (`publish_register`,
+  `get_current_register`, `get_register`). `complete_review` does not publish.
 
 MCP exposes the gate but does not bypass it. Transport is MCP 2.0.0 stdio for local/trusted
-clients. Production authentication and register-publication tools are not implemented. No new
-persistence is required; Alembic head remains `20260819_0007`.
+clients. Production authentication is not implemented. Alembic head is `20260822_0008`.
 
 ### LangGraph Understand workflow
 
@@ -418,7 +420,7 @@ Implemented in Phase 08 as a thin adapter over the same application services as 
 - submit explicit approve/reject/edit decisions and complete the session;
 - inspect understanding, examination, current revision, and incremental evidence.
 
-MCP exposes the gate but does not bypass it. The demonstrated path must not let the proposing agent automatically approve its own proposals. This is a workflow requirement, not an added RBAC or proposer/reviewer identity-separation requirement. Verify-published-register tools remain later; publication is not implemented.
+MCP exposes the gate but does not bypass it. The demonstrated path must not let the proposing agent automatically approve its own proposals. This is a workflow requirement, not an added RBAC or proposer/reviewer identity-separation requirement. Phase 10 MCP tools `publish_register`, `get_current_register`, and `get_register` delegate to `PublicationService`. `complete_review` does not publish.
 
 ## Core records
 
@@ -510,18 +512,46 @@ and cleanup/reconciliation is deferred.
   `failed_retryable`, `failed_terminal`, `unchanged`, or `missing`. Restart uses these rows so
   unchanged completed bytes are not re-ingested, while pending incremental work is retried.
 
+Implemented in Phase 10:
+
+- `PublishedRegister`: corpus-scoped immutable publication after a completed review session.
+  Linked to the exact review/examination/analysis (optional workflow run and corpus revision).
+  `publication_number` plus `content_sha256` form `version_identity`. At most one `is_current`
+  row per corpus (partial unique index). Older rows are retained. `register_status` is
+  `populated`, `no_findings`, `insufficient_evidence`, or `empty_after_review`.
+- `PublishedRegisterItem`: applied approved or edited review items only. Rejected items are
+  omitted and recorded as `item_omitted_rejected` events. System-grounded citations remain;
+  reviewer-authored overlays are flagged and never stored as source quotes.
+- `PublishedRegisterItemFact` / `PublishedRegisterItemContradiction`: FK evidence links.
+- `PublicationEvent`: append-only publication audit.
+
+Publication is a final validation boundary, not a snapshot of trusted review JSON.
+`PublicationService` reloads every selected same-run/same-corpus finding and reuses Examine's
+evidence validator. Each referenced SUPPORTED fact is resolved through Phase 02 against freshly
+hashed and parsed immutable source bytes, including source version, block binding, locator,
+half-open span, and exact quote, then rechecked by Phase 03 assertion grounding. Contradictions
+revalidate both same-analysis fact sides. Failure occurs before the current-register update and is
+reported as the controlled `publication_evidence_validation_failed` contract.
+
+Same-corpus concurrent publish uses `pg_advisory_lock(hashtext('publish-corpus:{corpus_id}'))`.
+Idempotent republish of the same `(corpus_id, review_session_id)` returns the existing row.
+
 LangGraph checkpoint tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`,
 `checkpoint_migrations`) are created by migration `20260819_0006` and owned by
 `AsyncPostgresSaver`.
 
-Rules live in versioned application configuration (`software-project-assurance.v1`), not a
-user-upload table. A user-supplied rule editor is not implemented.
+Rules live in versioned application configuration (`software-project-assurance.v1` JSON plus named
+evaluators), not a user-upload table. A user-supplied rule editor is not implemented.
+`ApplicationServices` loads `Settings.ruleset_path` at construction and injects the resulting
+ruleset instance into `ExamineService` / `ExamineWorkflow`; the active runtime ruleset is not
+chosen by module-import environment state. Workflow version metadata and incremental impact /
+re-evaluation read the same injected instance. Changing a supported JSON outcome map changes real
+Examine behavior without rewriting evaluator Python.
 
-Planned for later phases:
+Planned and not implemented:
 
-- `RegisterItem`: stable assurance item with canonical serialized content.
-- `ChangeSet` and `ChangeItem`: immutable proposals and their before/after hashes.
-- `RegisterVersion`: published version and ordered item hashes.
+- internet-facing authentication and hosted cloud;
+- a second Examine pass that cites published register locators as deliverable-side evidence.
 
 Every query and uniqueness rule must include the appropriate corpus, source, run, or register-version identity. Do not rely on process-local global state.
 
@@ -580,16 +610,17 @@ POST /workflow-runs
 → still waiting_for_review; no decisions created
 → explicit Phase 05 complete
 → resume continues to finalize
-→ workflow status = completed (no publication)
+→ workflow status = completed (still unpublished)
+→ POST .../review-sessions/{id}/publish
+→ immutable PublishedRegister (is_current)
 ```
 
-Register publication remains later:
+Workflow completion is not publication. Understand and Examine never publish.
 
 ```text
-READY_TO_RESUME
-→ APPLYING_APPROVED_ITEMS
-→ VERIFYING
-→ COMPLETED
+completed review
+→ explicit publication action
+→ immutable published register/version
 ```
 
 Rules:
@@ -602,7 +633,11 @@ Rules:
 - Phase 03/04 records are not mutated by review.
 - React, HTTP, and MCP use the same decision validation. MCP tools call `ReviewService`; they do
   not auto-approve.
-- Publication of approved-only register versions is not implemented.
+- Publication applies only approved and edited items after the session is completed. Rejected
+  items are omitted. Pending optional PASS items are omitted and not treated as approved.
+  Empty/no-findings corpora publish `register_status=no_findings` rather than a false PASS.
+  UNKNOWN outcomes stay UNKNOWN. Aurora production-readiness contradictions retain both cited
+  sides when that item is approved. Reviewer-authored edits remain labeled separately.
 
 ## Exact provenance
 
@@ -660,7 +695,8 @@ Taxonomy `software-project-assurance.v1` is configuration, not corpus-name logic
 project identity, owner/accountability, milestone/date, status, risk, decision, dependency, and
 control/assurance. Document prompt-injection text is untrusted evidence.
 
-Register drafting remains later. Human review is implemented in Phase 05; MCP and HTTP share that gate.
+Historical Phase 03 scope left register drafting for a later phase. Human review was implemented
+in Phase 05; current Phase 10 publication uses that same gate through MCP and HTTP.
 
 ## Examine movement
 
@@ -706,8 +742,10 @@ Outcomes:
 - `unknown` — required supported evidence is absent. Silence is not compliance. UNKNOWN carries no
   fabricated evidence.
 
-A skipped or failed examination is never reported as no findings. Register-state examination is
-not implemented because no published register exists yet.
+A skipped or failed examination is never reported as no findings. A second Examine pass that treats
+a published register as the source of deliverable-side locators is not implemented. Publication
+itself derives citations from freshly revalidated authoritative facts for approved/edited review
+items; copied review/finding citation snapshots are not the publication authority.
 
 ## Incremental stay-alive movement
 
@@ -766,10 +804,10 @@ reused artifact counts, changed-source count, and duration. Cost savings are not
 ## Durability, idempotency, and concurrency
 
 Durable resume is non-cuttable behavior 2 and is implemented in Phase 06. Concurrent-run isolation
-for independent workflow runs against the same corpus is implemented. Concurrent publication of a
-register version remains planned behavior 9 remainder: **Strong differentiator — may be cut only
-with explicit rationale if time forces a trade-off.** Publication is not implemented in Phase 06
-because the durable contract stops at the explicit human-review gate.
+for independent workflow runs against the same corpus is implemented. Historical Phase 06 scope
+stopped at the explicit human-review gate and left concurrent publication as the planned Behavior
+9 remainder. Current Phase 10 state implements explicit register publication and same-corpus
+publication isolation without changing the Phase 06 workflow-completion contract.
 
 Implemented PostgreSQL-backed mechanism:
 
@@ -885,10 +923,10 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
   A valid-but-unrelated citation is not sufficient.
 - Unsupported claims remain explicit and cannot be rendered as sourced facts.
 - Contradictory evidence remains visible until a human decision; it is not silently reconciled.
-- `COMPLETED` for a published register still requires a durable published version, applied-decision
-  audit, and successful provenance/hash verification. That publication step is not implemented.
-  Workflow run `completed` means the durable graph finished after an explicit Phase 05 review
-  completion; it is not a published register.
+- `COMPLETED` for a published register requires a durable published version, applied-decision
+  audit, and successful provenance/hash plus assertion-grounding revalidation. Phase 10 implements
+  that explicit publication step. Workflow run `completed` still means only that the durable graph
+  finished after explicit Phase 05 review completion; it is not itself a published register.
 - Examination findings that are PASS, FAIL, or WARNING with grounded-fact evidence require supported
   Phase 03 facts whose citations revalidate through Phase 02 exact provenance and Phase 03
   assertion-to-evidence matching. Missing evidence is UNKNOWN. Retrieval hits and unsupported
@@ -904,7 +942,7 @@ This trust ordering does not require RBAC or proposer/reviewer identity separati
 
 ## Observability and cost
 
-Behavior 10 remains a strong differentiator. Phase 03 persists durable `StageEvent` rows and
+Behavior 10 is implemented locally. Phase 03 persists durable `StageEvent` rows and
 Phase 04 persists `ExaminationStageEvent` rows with stage name, start/end/duration, skip reason
 when skipped, logical `model_operation_count`, provider `model_attempt_count`, rule-evaluation
 count only on `evaluate_rules` (zero on other Examine stages), token fields when available, estimated cost or honest
@@ -915,6 +953,9 @@ stage counts, classify/extract executed versus skipped source-version IDs, avoid
 count, affected/reused artifact counts, changed-source count, duration, and `estimated_cost_usd=0`
 in deterministic mode. Phase 08 adds a compact React workflow status/timeline/resume panel over
 existing APIs. No elaborate observability dashboard exists.
+Phase 10 exposes these records through workflow usage. `total_duration_ms` is the sum of outer
+workflow-event durations only (`duration_basis=outer_workflow_events`); nested Understand and
+Examine stage durations are reported separately and are not double-counted in that aggregate.
 
 ## Keyless test architecture
 
@@ -926,7 +967,8 @@ assertion-to-evidence validation. Tests exercise real parsers, the Phase 02 cita
 grounding validator, LangGraph Understand and Examine transitions, PostgreSQL/pgvector, FastAPI,
 PostgreSQL LangGraph checkpoints, the operation ledger, a real subprocess kill/resume, focused
 incremental Aurora/Harbor second runs, stale-baseline concurrency, stable-file watcher polling,
-and real MCP stdio client/server transport. Register publication remains later.
+and real MCP stdio client/server transport, including explicit `publish_register` after completed
+review. Workflow completion is not treated as publication.
 
 Fixtures must include:
 
@@ -996,13 +1038,15 @@ This planned architecture becomes documented implementation only as matching evi
 2. exact parser locator round-trips;
 3. grounded understand and examine graphs;
 4. real human `WAITING_FOR_REVIEW` flow;
-5. mandatory kill/resume evidence; concurrent publication remains later;
+5. mandatory kill/resume evidence; concurrent same-corpus publication isolation is implemented
+   in Phase 10;
 6. incremental affected-set, executed-versus-reused operations, and unchanged canonical-hash
    evidence (Phase 07 local implementation);
-7. UI and MCP/API shared-gate behavior (Phase 08 local implementation; MCP stdio over the same
-   review/workflow services; compact workflow status panel; register publication remains later);
+7. UI and MCP/API shared-gate behavior (Phase 08–10; MCP stdio over the same application
+   services including publication tools; compact workflow status and register panels);
 8. Phase 09 local adversarial, no-bluffing, tamper, MCP security, measurement, and keyless
    evidence; not independently re-verified; and
-9. planned Behavior 6 fresh-clone local/container audit on a second corpus.
+9. Behavior 6 fresh-clone local Compose path (`docker compose up --build`) plus Harbor second
+   corpus; hosted cloud is not implemented.
 
 If a behavior 6–10 gate is cut, `PROGRESS.md` and README must record the explicit rationale and limitation rather than treating it as failed minimum acceptance.

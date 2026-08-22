@@ -1,6 +1,17 @@
+import json
+import os
 from dataclasses import replace
+from pathlib import Path
+from typing import cast
 
+import pytest
+from helpers import ingest_corpus
+from pydantic import SecretStr
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from app.config import Settings
 from app.ruleset import (
+    PACKAGED_RULESET_PATH,
     RULES,
     RULES_BY_ID,
     RULESET_VERSION,
@@ -9,9 +20,13 @@ from app.ruleset import (
     UnderstandingView,
     evaluate_rule,
     evaluate_rules,
+    load_ruleset,
     select_rules,
     validate_evaluation,
 )
+from app.runtime import build_application_services
+from app.services import Phase02Service
+from app.storage import LocalFileStorage
 
 
 def _fact(
@@ -128,6 +143,90 @@ def test_green_status_produces_pass() -> None:
     )
     result = evaluate_rule(RULES_BY_ID["spa.status.clarity"], view)
     assert result.outcome == "pass"
+
+
+def test_changing_ruleset_json_changes_behavior_without_evaluator_rewrite(
+    tmp_path: Path,
+) -> None:
+    payload = json.loads(PACKAGED_RULESET_PATH.read_text(encoding="utf-8"))
+    for rule in payload["rules"]:
+        if rule["rule_id"] == "spa.status.clarity":
+            rule["configuration"]["value_outcomes"]["amber"] = "fail"
+    alternate = tmp_path / "software-project-assurance.v1.alt.json"
+    alternate.write_text(json.dumps(payload), encoding="utf-8")
+    view = UnderstandingView(
+        facts=(_fact("s", category="status", subject_key="overall_status", value="amber"),),
+        contradictions=(),
+    )
+    default_rule = next(rule for rule in load_ruleset() if rule.rule_id == "spa.status.clarity")
+    changed_rule = next(
+        rule for rule in load_ruleset(alternate) if rule.rule_id == "spa.status.clarity"
+    )
+    assert evaluate_rule(default_rule, view).outcome == "warning"
+    assert evaluate_rule(changed_rule, view).outcome == "fail"
+    assert default_rule.evaluator == changed_rule.evaluator == "mapped_supported_value"
+
+
+@pytest.mark.integration
+async def test_ruleset_path_changes_real_application_examine_behavior(
+    phase02_service: tuple[Phase02Service, LocalFileStorage],
+    corpus_fixtures: Path,
+    tmp_path: Path,
+) -> None:
+    phase02, _storage = phase02_service
+    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    default_services = build_application_services(
+        settings=Settings(database_url=SecretStr(os.environ["TEST_DATABASE_URL"])),
+        engine=cast(AsyncEngine, phase02.session_factory.kw["bind"]),
+        session_factory=phase02.session_factory,
+        phase02_service=phase02,
+        include_watcher=False,
+    )
+    default_analysis = await default_services.understand.create_run(corpus.id)
+    default_examination = await default_services.examine.create_run(corpus.id, default_analysis.id)
+    default_findings = {
+        item.rule_id: item
+        for item in await default_services.examine.list_findings(corpus.id, default_examination.id)
+    }
+    assert default_findings["spa.status.clarity"].outcome == "warning"
+
+    payload = json.loads(PACKAGED_RULESET_PATH.read_text(encoding="utf-8"))
+    for rule in payload["rules"]:
+        if rule["rule_id"] == "spa.status.clarity":
+            rule["configuration"]["value_outcomes"]["amber"] = "fail"
+    override_path = tmp_path / "runtime-ruleset.json"
+    override_path.write_text(json.dumps(payload), encoding="utf-8")
+    override_services = build_application_services(
+        settings=Settings(
+            database_url=SecretStr(os.environ["TEST_DATABASE_URL"]),
+            ruleset_path=override_path,
+        ),
+        engine=cast(AsyncEngine, phase02.session_factory.kw["bind"]),
+        session_factory=phase02.session_factory,
+        phase02_service=phase02,
+        include_watcher=False,
+    )
+    override_analysis = await override_services.understand.create_run(corpus.id)
+    override_examination = await override_services.examine.create_run(
+        corpus.id, override_analysis.id
+    )
+    override_findings = {
+        item.rule_id: item
+        for item in await override_services.examine.list_findings(
+            corpus.id, override_examination.id
+        )
+    }
+    assert override_findings["spa.status.clarity"].outcome == "fail"
+    assert (
+        override_findings["spa.status.clarity"].structured_reason["evaluator"]
+        == "mapped_supported_value"
+    )
+    assert (
+        default_services.examine.ruleset.rules_by_id["spa.status.clarity"].configuration[
+            "value_outcomes"
+        ]["amber"]
+        == "warning"
+    )
 
 
 def test_missing_required_evidence_produces_unknown_not_pass() -> None:

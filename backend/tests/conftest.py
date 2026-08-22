@@ -39,6 +39,8 @@ async def phase02_service(
         await connection.execute(
             text(
                 "TRUNCATE checkpoint_writes, checkpoint_blobs, checkpoints, "
+                "publication_events, published_register_item_contradictions, "
+                "published_register_item_facts, published_register_items, published_registers, "
                 "watcher_files, incremental_artifact_evidence, corpus_revision_sources, "
                 "durable_operations, incremental_runs, corpus_revisions, "
                 "workflow_run_events, workflow_runs, "
@@ -58,6 +60,8 @@ async def phase02_service(
             await connection.execute(
                 text(
                     "TRUNCATE checkpoint_writes, checkpoint_blobs, checkpoints, "
+                    "publication_events, published_register_item_contradictions, "
+                    "published_register_item_facts, published_register_items, published_registers, "
                     "watcher_files, incremental_artifact_evidence, corpus_revision_sources, "
                     "durable_operations, incremental_runs, corpus_revisions, "
                     "workflow_run_events, workflow_runs, "

@@ -20,8 +20,10 @@ Evidence kinds:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 from app.taxonomy import comparison_key
@@ -52,6 +54,16 @@ class Rule:
     consumes_contradictions: bool
     unknown_behavior: str
     configuration: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class RulesetConfig:
+    version: str
+    rules: tuple[Rule, ...]
+
+    @property
+    def rules_by_id(self) -> dict[str, Rule]:
+        return {rule.rule_id: rule for rule in self.rules}
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,150 +110,55 @@ class RuleEvaluation:
     evidence_kind: EvidenceKind
 
 
-RULES: tuple[Rule, ...] = (
-    Rule(
-        rule_id="spa.ownership.sponsor",
-        version=RULE_VERSION,
-        title="Project sponsor is identified",
-        category="owner_accountability",
-        severity="high",
-        description="A supported project sponsor must be named; silence is not accountability.",
-        evaluator="required_assigned_owner",
-        required_fact_categories=("owner_accountability",),
-        required_subject_keys=("project_sponsor",),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={"category": "owner_accountability", "subject_key": "project_sponsor"},
-    ),
-    Rule(
-        rule_id="spa.ownership.delivery-lead",
-        version=RULE_VERSION,
-        title="Delivery lead is identified",
-        category="owner_accountability",
-        severity="high",
-        description="A supported delivery lead must be named.",
-        evaluator="required_assigned_owner",
-        required_fact_categories=("owner_accountability",),
-        required_subject_keys=("delivery_lead",),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={"category": "owner_accountability", "subject_key": "delivery_lead"},
-    ),
-    Rule(
-        rule_id="spa.status.clarity",
-        version=RULE_VERSION,
-        title="Project status is explicit",
-        category="status",
-        severity="medium",
-        description="Overall status must be grounded. Amber is a warning; red is a failure.",
-        evaluator="mapped_supported_value",
-        required_fact_categories=("status",),
-        required_subject_keys=("overall_status",),
-        consumes_contradictions=True,
-        unknown_behavior="unknown_if_missing",
-        configuration={
-            "category": "status",
-            "subject_key": "overall_status",
-            "value_outcomes": {"green": "pass", "amber": "warning", "red": "fail"},
-            "unmapped_outcome": "warning",
-        },
-    ),
-    Rule(
-        rule_id="spa.milestone.production-readiness",
-        version=RULE_VERSION,
-        title="Production-readiness date is consistent",
-        category="milestone_date",
-        severity="high",
-        description=(
-            "Conflicting grounded production-readiness dates fail; missing dates are unknown."
-        ),
-        evaluator="subject_contradiction",
-        required_fact_categories=("milestone_date",),
-        required_subject_keys=("production_readiness",),
-        consumes_contradictions=True,
-        unknown_behavior="unknown_if_missing",
-        configuration={"category": "milestone_date", "subject_key": "production_readiness"},
-    ),
-    Rule(
-        rule_id="spa.ownership.security-signoff",
-        version=RULE_VERSION,
-        title="Security sign-off owner is assigned",
-        category="owner_accountability",
-        severity="high",
-        description="Security sign-off ownership must be a named person, not unassigned or absent.",
-        evaluator="required_assigned_owner",
-        required_fact_categories=("owner_accountability",),
-        required_subject_keys=("security_signoff_owner",),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={
-            "category": "owner_accountability",
-            "subject_key": "security_signoff_owner",
-        },
-    ),
-    Rule(
-        rule_id="spa.ownership.budget",
-        version=RULE_VERSION,
-        title="Budget owner is identified",
-        category="owner_accountability",
-        severity="medium",
-        description="A supported budget owner is required; missing evidence stays unknown.",
-        evaluator="required_assigned_owner",
-        required_fact_categories=("owner_accountability",),
-        required_subject_keys=("budget_owner",),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={"category": "owner_accountability", "subject_key": "budget_owner"},
-    ),
-    Rule(
-        rule_id="spa.dependency.evidence",
-        version=RULE_VERSION,
-        title="Dependency evidence is recorded",
-        category="dependency",
-        severity="medium",
-        description="At least one supported dependency fact is required.",
-        evaluator="required_supported_category",
-        required_fact_categories=("dependency",),
-        required_subject_keys=(),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={"categories": ["dependency"]},
-    ),
-    Rule(
-        rule_id="spa.control.assurance",
-        version=RULE_VERSION,
-        title="Assurance or control evidence is recorded",
-        category="control_assurance",
-        severity="medium",
-        description="At least one supported control or assurance fact is required.",
-        evaluator="required_supported_category",
-        required_fact_categories=("control_assurance",),
-        required_subject_keys=(),
-        consumes_contradictions=False,
-        unknown_behavior="unknown_if_missing",
-        configuration={"categories": ["control_assurance"]},
-    ),
-    Rule(
-        rule_id=OPEN_CONTRADICTION_RULE_ID,
-        version=RULE_VERSION,
-        title="Open grounded contradictions",
-        category="contradiction",
-        severity="high",
-        description=(
-            "Remaining open Phase 03 contradictions that were not consumed by a more "
-            "specific rule fail. Zero remaining contradictions PASS only with a same-run "
-            "completed detect_contradictions attestation; otherwise UNKNOWN. Unrelated "
-            "supported facts are never attached as evidence."
-        ),
-        evaluator="open_contradictions",
-        required_fact_categories=(),
-        required_subject_keys=(),
-        consumes_contradictions=True,
-        unknown_behavior="unknown_unless_attested_zero",
-        configuration={},
-    ),
+PACKAGED_RULESET_PATH = (
+    Path(__file__).resolve().parent / "rulesets" / "software-project-assurance.v1.json"
 )
 
+
+def default_ruleset_path() -> Path:
+    return PACKAGED_RULESET_PATH
+
+
+def rule_from_mapping(raw: Mapping[str, Any]) -> Rule:
+    return Rule(
+        rule_id=str(raw["rule_id"]),
+        version=str(raw.get("version") or RULE_VERSION),
+        title=str(raw["title"]),
+        category=str(raw["category"]),
+        severity=str(raw["severity"]),
+        description=str(raw["description"]),
+        evaluator=str(raw["evaluator"]),
+        required_fact_categories=tuple(str(item) for item in raw["required_fact_categories"]),
+        required_subject_keys=tuple(str(item) for item in raw["required_subject_keys"]),
+        consumes_contradictions=bool(raw["consumes_contradictions"]),
+        unknown_behavior=str(raw["unknown_behavior"]),
+        configuration=dict(raw.get("configuration") or {}),
+    )
+
+
+def load_ruleset_config(path: Path | None = None) -> RulesetConfig:
+    """Load validated ruleset data without import-time environment configuration."""
+    resolved = path or default_ruleset_path()
+    payload = json.loads(resolved.read_text(encoding="utf-8"))
+    rules = tuple(rule_from_mapping(item) for item in payload["rules"])
+    if not rules:
+        raise ValueError("ruleset must contain at least one rule")
+    ids = [rule.rule_id for rule in rules]
+    if len(ids) != len(set(ids)):
+        raise ValueError("ruleset rule ids must be unique")
+    version = str(payload.get("ruleset_version") or "").strip()
+    if not version:
+        raise ValueError("ruleset_version must be non-empty")
+    return RulesetConfig(version=version, rules=rules)
+
+
+def load_ruleset(path: Path | None = None) -> tuple[Rule, ...]:
+    """Load versioned rules as configuration data. Evaluators remain named Python functions."""
+    return load_ruleset_config(path).rules
+
+
+RULESET_CONFIG = load_ruleset_config(PACKAGED_RULESET_PATH)
+RULES: tuple[Rule, ...] = RULESET_CONFIG.rules
 RULES_BY_ID = {rule.rule_id: rule for rule in RULES}
 
 
@@ -367,11 +284,15 @@ def evaluate_rules(
     return tuple(by_id[rule.rule_id] for rule in rules if rule.rule_id in by_id)
 
 
-def validate_evaluation(evaluation: RuleEvaluation, view: UnderstandingView) -> str | None:
+def validate_evaluation(
+    evaluation: RuleEvaluation,
+    view: UnderstandingView,
+    rules_by_id: Mapping[str, Rule] | None = None,
+) -> str | None:
     """Return a reason code when a finding is not safely grounded."""
     by_id = facts_by_id(view)
     contradiction_by_id = {item.id: item for item in view.contradictions}
-    rule = RULES_BY_ID.get(evaluation.rule_id)
+    rule = (rules_by_id or RULES_BY_ID).get(evaluation.rule_id)
     if evaluation.outcome not in {"pass", "fail", "warning", "unknown"}:
         return "invalid_outcome"
     if evaluation.evidence_kind not in {"none", "grounded_facts", "process_attestation"}:

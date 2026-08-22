@@ -10,7 +10,14 @@ from app.db import SessionFactory
 from app.errors import NotFoundError, ValidationError
 from app.examine_graph import ExamineWorkflow, utcnow
 from app.models import ExaminationRun, ExaminationStageEvent, Fact, Finding
-from app.ruleset import EXAMINE_GRAPH_VERSION, RULES, RULESET_VERSION, UnderstandingView
+from app.ruleset import (
+    EXAMINE_GRAPH_VERSION,
+    GroundedContradictionView,
+    GroundedFactView,
+    RulesetConfig,
+    UnderstandingView,
+    load_ruleset_config,
+)
 from app.schemas import (
     CitationRequest,
     ExaminationRunResponse,
@@ -28,11 +35,17 @@ class ExamineService:
         session_factory: SessionFactory,
         phase02: Phase02Service,
         understand: UnderstandService,
+        ruleset: RulesetConfig | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.phase02 = phase02
         self.understand = understand
-        self.workflow = ExamineWorkflow(session_factory=session_factory, phase02=phase02)
+        self.ruleset = ruleset or load_ruleset_config()
+        self.workflow = ExamineWorkflow(
+            session_factory=session_factory,
+            phase02=phase02,
+            ruleset=self.ruleset,
+        )
 
     async def revalidate_finding_payloads(
         self,
@@ -51,6 +64,86 @@ class ExamineService:
             classifications=classifications,
         )
 
+    async def revalidate_persisted_findings(
+        self,
+        *,
+        corpus_id: UUID,
+        analysis_run_id: UUID,
+        examination_run_id: UUID,
+        finding_ids: Sequence[UUID],
+    ) -> None:
+        """Re-run the existing Examine provenance and grounding boundary."""
+        understanding = await self.understand.get_understanding(corpus_id, analysis_run_id)
+        facts = tuple(
+            GroundedFactView(
+                id=str(fact.id),
+                category=fact.category,
+                subject_key=fact.subject_key,
+                normalized_value=fact.normalized_value,
+                support_status=fact.support_status,
+                citation=(
+                    fact.citation.model_dump(mode="json") if fact.citation is not None else None
+                ),
+                source_block_id=str(fact.source_block_id) if fact.source_block_id else None,
+            )
+            for fact in understanding.facts
+        )
+        contradictions = tuple(
+            GroundedContradictionView(
+                id=str(item.id),
+                contradiction_type=item.contradiction_type,
+                fact_a_id=str(item.fact_a.id),
+                fact_b_id=str(item.fact_b.id),
+                reason=item.reason,
+                status=item.status,
+            )
+            for item in understanding.contradictions
+        )
+        attested = any(
+            event.stage_name == "detect_contradictions" and event.status == "completed"
+            for event in understanding.stage_events
+        )
+        view = UnderstandingView(
+            facts=facts,
+            contradictions=contradictions,
+            contradiction_detection_attested=attested,
+        )
+        requested = set(finding_ids)
+        responses = await self.list_finding_responses(corpus_id, examination_run_id)
+        selected = [finding for finding in responses if finding.id in requested]
+        if {finding.id for finding in selected} != requested:
+            raise ValidationError(
+                "publication_finding_chain_invalid",
+                "Publication referenced a finding outside the selected examination chain.",
+                "Publish only review items from the completed examination.",
+            )
+        payloads = [
+            {
+                "rule_id": finding.rule_id,
+                "rule_version": finding.rule_version,
+                "outcome": finding.outcome,
+                "severity": finding.severity,
+                "title": finding.title,
+                "message": finding.message,
+                "reason": dict(finding.structured_reason),
+                "fact_ids": [str(item) for item in finding.fact_ids],
+                "contradiction_ids": [str(item) for item in finding.contradiction_ids],
+                "citations": [citation.model_dump(mode="json") for citation in finding.citations],
+                "confidence": finding.confidence,
+                "evidence_kind": finding.evidence_kind,
+            }
+            for finding in selected
+        ]
+        await self.revalidate_finding_payloads(
+            corpus_id=corpus_id,
+            analysis_run_id=analysis_run_id,
+            findings=payloads,
+            view=view,
+            classifications=[
+                item.model_dump(mode="json") for item in understanding.classifications
+            ],
+        )
+
     async def create_run(self, corpus_id: UUID, analysis_run_id: UUID) -> ExaminationRun:
         await self.phase02.get_corpus(corpus_id)
         analysis = await self.understand.get_run(corpus_id, analysis_run_id)
@@ -66,12 +159,12 @@ class ExamineService:
             analysis_run_id=analysis_run_id,
             status="running",
             findings_status="pending",
-            ruleset_version=RULESET_VERSION,
+            ruleset_version=self.ruleset.version,
             graph_version=EXAMINE_GRAPH_VERSION,
             started_at=utcnow(),
             configuration={
-                "ruleset_version": RULESET_VERSION,
-                "rule_ids": [rule.rule_id for rule in RULES],
+                "ruleset_version": self.ruleset.version,
+                "rule_ids": [rule.rule_id for rule in self.ruleset.rules],
             },
             result_payload={},
         )

@@ -1,7 +1,7 @@
 [project]
 name = "project-assurance-register"
-version = "0.9.0"
-description = "Hardened grounded Understand, Examine, human review, incremental updates, and MCP operations"
+version = "1.0.0"
+description = "Grounded Project Assurance Register with explicit publication and local Compose delivery"
 requires-python = "==3.13.*"
 dependencies = [
     "alembic==1.19.1",
@@ -37,6 +37,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/app"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/app/rulesets/software-project-assurance.v1.json" = "app/rulesets/software-project-assurance.v1.json"
 
 [tool.ruff]
 target-version = "py313"

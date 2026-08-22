@@ -71,6 +71,31 @@ function stubStatus(overrides?: {
       if (path.endsWith("/events")) {
         return Promise.resolve(jsonResponse(events));
       }
+      if (path.endsWith("/usage")) {
+        return Promise.resolve(
+          jsonResponse({
+            total_duration_ms: 12,
+            total_model_operation_count: 2,
+            total_model_attempt_count: 2,
+            estimated_cost_usd: 0,
+            cost_basis: "zero_deterministic",
+            pricing_basis:
+              "Deterministic local adapter: estimated_cost_usd is 0.",
+            stages: [
+              {
+                graph: "understand",
+                stage_name: "extract",
+                status: "completed",
+                duration_ms: 8,
+                model_operation_count: 1,
+                model_attempt_count: 1,
+                estimated_cost_usd: 0,
+                cost_basis: "zero_deterministic",
+              },
+            ],
+          }),
+        );
+      }
       if (path.endsWith("/review-sessions/session-1")) {
         return Promise.resolve(
           jsonResponse({ ...session, ...overrides?.session }),
@@ -163,6 +188,31 @@ describe("WorkflowStatusPanel", () => {
         if (path.endsWith("/events")) {
           return Promise.resolve(jsonResponse(events));
         }
+        if (path.endsWith("/usage")) {
+          return Promise.resolve(
+            jsonResponse({
+              total_duration_ms: 12,
+              total_model_operation_count: 2,
+              total_model_attempt_count: 2,
+              estimated_cost_usd: 0,
+              cost_basis: "zero_deterministic",
+              pricing_basis:
+                "Deterministic local adapter: estimated_cost_usd is 0.",
+              stages: [
+                {
+                  graph: "understand",
+                  stage_name: "extract",
+                  status: "completed",
+                  duration_ms: 8,
+                  model_operation_count: 1,
+                  model_attempt_count: 1,
+                  estimated_cost_usd: 0,
+                  cost_basis: "zero_deterministic",
+                },
+              ],
+            }),
+          );
+        }
         if (path.endsWith("/review-sessions/session-1")) {
           return Promise.resolve(
             jsonResponse({ ...session, status: "completed", pending_count: 0 }),
@@ -230,6 +280,31 @@ describe("WorkflowStatusPanel", () => {
         if (path.endsWith("/events")) {
           return Promise.resolve(jsonResponse(events));
         }
+        if (path.endsWith("/usage")) {
+          return Promise.resolve(
+            jsonResponse({
+              total_duration_ms: 12,
+              total_model_operation_count: 2,
+              total_model_attempt_count: 2,
+              estimated_cost_usd: 0,
+              cost_basis: "zero_deterministic",
+              pricing_basis:
+                "Deterministic local adapter: estimated_cost_usd is 0.",
+              stages: [
+                {
+                  graph: "understand",
+                  stage_name: "extract",
+                  status: "completed",
+                  duration_ms: 8,
+                  model_operation_count: 1,
+                  model_attempt_count: 1,
+                  estimated_cost_usd: 0,
+                  cost_basis: "zero_deterministic",
+                },
+              ],
+            }),
+          );
+        }
         if (path.endsWith("/review-sessions/session-1")) {
           return Promise.resolve(jsonResponse(session));
         }
@@ -271,6 +346,31 @@ describe("WorkflowStatusPanel", () => {
       }
       if (path.endsWith("/events")) {
         return Promise.resolve(jsonResponse(events));
+      }
+      if (path.endsWith("/usage")) {
+        return Promise.resolve(
+          jsonResponse({
+            total_duration_ms: 12,
+            total_model_operation_count: 2,
+            total_model_attempt_count: 2,
+            estimated_cost_usd: 0,
+            cost_basis: "zero_deterministic",
+            pricing_basis:
+              "Deterministic local adapter: estimated_cost_usd is 0.",
+            stages: [
+              {
+                graph: "understand",
+                stage_name: "extract",
+                status: "completed",
+                duration_ms: 8,
+                model_operation_count: 1,
+                model_attempt_count: 1,
+                estimated_cost_usd: 0,
+                cost_basis: "zero_deterministic",
+              },
+            ],
+          }),
+        );
       }
       if (path.endsWith("/review-sessions/session-1")) {
         return Promise.resolve(jsonResponse(session));

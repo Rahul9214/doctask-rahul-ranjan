@@ -21,7 +21,7 @@ from app.model_gateway import PROMPT_CONFIG_VERSION, ModelAdapter, create_model_
 from app.models import SourceVersion, WorkflowRun, WorkflowRunEvent
 from app.operation_ledger import OperationLedger
 from app.review_service import ReviewService
-from app.ruleset import RULESET_VERSION
+from app.schemas import RunUsageResponse, StageUsage
 from app.services import Phase02Service
 from app.taxonomy import GRAPH_VERSION, TAXONOMY_VERSION
 from app.understand_graph import utcnow
@@ -82,7 +82,7 @@ class WorkflowService:
                 "taxonomy_version": TAXONOMY_VERSION,
                 "understand_graph_version": GRAPH_VERSION,
                 "prompt_config_version": PROMPT_CONFIG_VERSION,
-                "ruleset_version": RULESET_VERSION,
+                "ruleset_version": self.examine.ruleset.version,
                 "workflow_graph_version": WORKFLOW_GRAPH_VERSION,
                 "source_input_version": fingerprint,
                 "model_provider": self.adapter.mode,
@@ -128,6 +128,104 @@ class WorkflowService:
                 )
             )
             return list(events)
+
+    async def get_usage(self, corpus_id: UUID, run_id: UUID) -> RunUsageResponse:
+        run = await self.get_run(corpus_id, run_id)
+        stages: list[StageUsage] = []
+        if run.analysis_run_id is not None:
+            for understand_event in await self.examine.understand.list_stage_events(
+                corpus_id, run.analysis_run_id
+            ):
+                stages.append(
+                    StageUsage(
+                        graph="understand",
+                        stage_name=understand_event.stage_name,
+                        status=understand_event.status,
+                        duration_ms=understand_event.duration_ms,
+                        model_operation_count=understand_event.model_operation_count,
+                        model_attempt_count=understand_event.model_attempt_count,
+                        input_tokens=understand_event.input_tokens,
+                        output_tokens=understand_event.output_tokens,
+                        estimated_cost_usd=understand_event.estimated_cost_usd,
+                        cost_basis=understand_event.cost_basis,
+                        skip_reason=understand_event.skip_reason,
+                    )
+                )
+        if run.examination_run_id is not None:
+            for examine_event in await self.examine.list_stage_events(
+                corpus_id, run.examination_run_id
+            ):
+                stages.append(
+                    StageUsage(
+                        graph="examine",
+                        stage_name=examine_event.stage_name,
+                        status=examine_event.status,
+                        duration_ms=examine_event.duration_ms,
+                        model_operation_count=examine_event.model_operation_count,
+                        model_attempt_count=examine_event.model_attempt_count,
+                        input_tokens=examine_event.input_tokens,
+                        output_tokens=examine_event.output_tokens,
+                        estimated_cost_usd=examine_event.estimated_cost_usd,
+                        cost_basis=examine_event.cost_basis,
+                        skip_reason=examine_event.skip_reason,
+                    )
+                )
+        for workflow_event in await self.list_events(corpus_id, run_id):
+            if workflow_event.stage_name is None:
+                continue
+            stages.append(
+                StageUsage(
+                    graph="workflow",
+                    stage_name=workflow_event.stage_name,
+                    status=workflow_event.event_type,
+                    duration_ms=workflow_event.duration_ms,
+                    model_operation_count=0,
+                    model_attempt_count=0,
+                    estimated_cost_usd=0.0,
+                    cost_basis="zero_deterministic",
+                )
+            )
+        total_duration = sum(item.duration_ms or 0 for item in stages if item.graph == "workflow")
+        total_ops = sum(item.model_operation_count for item in stages)
+        total_attempts = sum(item.model_attempt_count for item in stages)
+        total_in = sum(item.input_tokens or 0 for item in stages)
+        total_out = sum(item.output_tokens or 0 for item in stages)
+        bases = {item.cost_basis for item in stages if item.graph != "workflow"}
+        if not bases or bases == {"zero_deterministic"}:
+            cost_basis = "zero_deterministic"
+            estimated = 0.0
+            pricing = (
+                "Deterministic local adapter: estimated_cost_usd is 0; no provider "
+                "pricing snapshot is applied."
+            )
+        elif "unavailable" in bases or any(
+            item.estimated_cost_usd is None and item.graph != "workflow" for item in stages
+        ):
+            cost_basis = "unavailable"
+            estimated = None
+            pricing = (
+                "Token and attempt counts are recorded; estimated cost is unavailable "
+                "because no pricing snapshot is configured."
+            )
+        else:
+            cost_basis = "mixed" if len(bases) > 1 else next(iter(bases))
+            amounts = [item.estimated_cost_usd or 0.0 for item in stages]
+            estimated = sum(amounts)
+            pricing = "Estimated cost sums recorded stage estimates; pricing basis is per-stage."
+        return RunUsageResponse(
+            workflow_run_id=run.id,
+            corpus_id=run.corpus_id,
+            stages=stages,
+            total_duration_ms=total_duration,
+            duration_basis="outer_workflow_events",
+            total_model_operation_count=total_ops,
+            total_model_attempt_count=total_attempts,
+            total_input_tokens=total_in,
+            total_output_tokens=total_out,
+            estimated_cost_usd=estimated,
+            cost_basis=cost_basis,
+            pricing_basis=pricing,
+        )
 
     async def resume_run(self, corpus_id: UUID, run_id: UUID) -> WorkflowRun:
         run = await self.get_run(corpus_id, run_id)

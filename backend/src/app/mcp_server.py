@@ -36,6 +36,7 @@ from app.schemas import (
     CorpusRevisionResponse,
     IncrementalEvidenceResponse,
     IncrementalRunResponse,
+    PublishedRegisterResponse,
     ReviewDecisionCreate,
     ReviewDecisionResult,
     ReviewSessionResponse,
@@ -50,8 +51,8 @@ configure_windows_psycopg_loop()
 MCP_INSTRUCTIONS = (
     "Local-development trusted-client MCP interface for the Project Assurance Register. "
     "Every mutation uses the same application services as HTTP. Explicit review decisions "
-    "are required; tools never auto-approve, batch-approve, or complete a session with "
-    "pending required items. Production authentication is not implemented."
+    "are required; tools never auto-approve, batch-approve, complete a session with "
+    "pending required items, or auto-publish. Production authentication is not implemented."
 )
 BUSINESS_TOOL_NAMES = (
     "list_corpora",
@@ -68,6 +69,9 @@ BUSINESS_TOOL_NAMES = (
     "reject_review_item",
     "edit_review_item",
     "complete_review",
+    "publish_register",
+    "get_current_register",
+    "get_register",
     "get_current_revision",
     "start_incremental_run",
     "get_incremental_evidence",
@@ -401,6 +405,53 @@ def register_tools(server: MCPServer[ApplicationServices]) -> None:
             return session_response(session)
 
         return await execute_mcp_tool("complete_review", run)
+
+    @server.tool()
+    async def publish_register(
+        corpus_id: UUID,
+        review_session_id: UUID,
+        ctx: Context[ApplicationServices],
+    ) -> PublishedRegisterResponse:
+        """Publish approved and edited review items. Does not run after complete_review."""
+
+        async def run() -> PublishedRegisterResponse:
+            runtime = _runtime(ctx)
+            register, _created = await runtime.publication.publish(
+                corpus_id,
+                review_session_id,
+                actor="mcp",
+                publication_source="api",
+            )
+            return register
+
+        return await execute_mcp_tool("publish_register", run)
+
+    @server.tool()
+    async def get_current_register(
+        corpus_id: UUID,
+        ctx: Context[ApplicationServices],
+    ) -> PublishedRegisterResponse:
+        """Inspect the current published register for a corpus."""
+
+        async def run() -> PublishedRegisterResponse:
+            runtime = _runtime(ctx)
+            return await runtime.publication.get_current_register(corpus_id)
+
+        return await execute_mcp_tool("get_current_register", run)
+
+    @server.tool()
+    async def get_register(
+        corpus_id: UUID,
+        publication_id: UUID,
+        ctx: Context[ApplicationServices],
+    ) -> PublishedRegisterResponse:
+        """Inspect one published register by identifier, scoped to the corpus."""
+
+        async def run() -> PublishedRegisterResponse:
+            runtime = _runtime(ctx)
+            return await runtime.publication.get_register(corpus_id, publication_id)
+
+        return await execute_mcp_tool("get_register", run)
 
     @server.tool()
     async def get_current_revision(

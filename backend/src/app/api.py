@@ -7,6 +7,7 @@ from app.errors import ConflictError, ValidationError
 from app.examine_service import ExamineService, stage_event_response
 from app.incremental_service import IncrementalService, json_object, json_object_list
 from app.parsers import SourceFormat
+from app.publication_service import PublicationService
 from app.review_service import ReviewService, session_response
 from app.schemas import (
     AnalysisRunResponse,
@@ -27,10 +28,13 @@ from app.schemas import (
     IncrementalRunCreate,
     IncrementalRunResponse,
     IngestionResponse,
+    PublishedRegisterResponse,
+    PublishRegisterRequest,
     ReviewDecisionCreate,
     ReviewDecisionResult,
     ReviewItemResponse,
     ReviewSessionResponse,
+    RunUsageResponse,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -77,6 +81,10 @@ def get_incremental_service(request: Request) -> IncrementalService:
     return cast(IncrementalService, request.app.state.incremental_service)
 
 
+def get_publication_service(request: Request) -> PublicationService:
+    return cast(PublicationService, request.app.state.publication_service)
+
+
 def get_watcher_service(request: Request) -> WatcherService:
     watcher = getattr(request.app.state, "watcher_service", None)
     if watcher is None:
@@ -94,6 +102,7 @@ Examine = Annotated[ExamineService, Depends(get_examine_service)]
 Review = Annotated[ReviewService, Depends(get_review_service)]
 Workflow = Annotated[WorkflowService, Depends(get_workflow_service)]
 Incremental = Annotated[IncrementalService, Depends(get_incremental_service)]
+Publication = Annotated[PublicationService, Depends(get_publication_service)]
 Watcher = Annotated[WatcherService, Depends(get_watcher_service)]
 
 
@@ -412,6 +421,50 @@ async def complete_review_session(
 
 
 @router.post(
+    "/corpora/{corpus_id}/review-sessions/{review_session_id}/publish",
+    response_model=PublishedRegisterResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def publish_register(
+    corpus_id: UUID,
+    review_session_id: UUID,
+    response: Response,
+    publication: Publication,
+    payload: PublishRegisterRequest | None = None,
+) -> PublishedRegisterResponse:
+    body = payload or PublishRegisterRequest()
+    register, created = await publication.publish(
+        corpus_id,
+        review_session_id,
+        actor=body.actor,
+        publication_source=body.publication_source,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return register
+
+
+@router.get(
+    "/corpora/{corpus_id}/register",
+    response_model=PublishedRegisterResponse,
+)
+async def get_current_register(
+    corpus_id: UUID, publication: Publication
+) -> PublishedRegisterResponse:
+    return await publication.get_current_register(corpus_id)
+
+
+@router.get(
+    "/corpora/{corpus_id}/register/{publication_id}",
+    response_model=PublishedRegisterResponse,
+)
+async def get_register(
+    corpus_id: UUID, publication_id: UUID, publication: Publication
+) -> PublishedRegisterResponse:
+    return await publication.get_register(corpus_id, publication_id)
+
+
+@router.post(
     "/corpora/{corpus_id}/workflow-runs",
     response_model=WorkflowRunResponse,
     status_code=status.HTTP_201_CREATED,
@@ -451,6 +504,16 @@ async def list_workflow_run_events(
         WorkflowRunEventResponse.model_validate(event)
         for event in await workflow.list_events(corpus_id, run_id)
     ]
+
+
+@router.get(
+    "/corpora/{corpus_id}/workflow-runs/{run_id}/usage",
+    response_model=RunUsageResponse,
+)
+async def get_workflow_run_usage(
+    corpus_id: UUID, run_id: UUID, workflow: Workflow
+) -> RunUsageResponse:
+    return await workflow.get_usage(corpus_id, run_id)
 
 
 @router.post(

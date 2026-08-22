@@ -31,10 +31,10 @@ MCP is trusted-client scope only; production authentication/RBAC is not
 implemented. Phase 09 adds adversarial/security suites, no-bluffing evidence,
 provenance/tamper matrix, malformed-input bounds, concurrency/kill-resume
 regression, incremental no-full-rerun regression, local measurements, and a
-lightweight secret-pattern/lockfile check. Register publication, production
-deployment, and a full Behavior 10 measurement/observability UI remain
-unimplemented. Phase 09 had a local implementation PASS, then independent verification
-FAIL / NO-GO; a local correction pass follows and is not independently re-verified.
+lightweight secret-pattern/lockfile check. Historical pre-Phase-10 status left register
+publication, local/container delivery, and Behavior 10 usage/cost reporting unimplemented.
+Current Phase 10 state implements explicit local publication, Docker Compose final delivery, and
+Behavior 10 usage/cost reporting. Independent final Phase 10 verification remains pending.
 
 Never describe a planned capability as implemented. Update `README.md` and `PROGRESS.md` only after executable evidence proves the capability.
 
@@ -249,7 +249,9 @@ Each item below is classified: **Strong differentiator — may be cut only with 
 - **Behavior 9:** concurrent distinct and same-corpus runs remain isolated.
 - **Behavior 10:** runs report per-stage elapsed time, attempts, model/token usage, and honest estimated cost with pricing basis.
 
-These remain planned and prioritized; they are not part of the explicit non-cuttable floor.
+Historically these were planned and prioritized; they are not part of the explicit non-cuttable
+floor. Current local implementation evidence is recorded below, with independent final Phase 10
+verification still pending.
 
 Additional qualities to retain where possible:
 
@@ -299,24 +301,31 @@ The final evidence suite must prove the five explicit floor behaviors:
 - [x] visible stage decisions and conditional retry/skip/escalation paths
   (Phase 03–06 local Understand/Examine/workflow evidence; not independently re-verified);
 - [x] a real human supplies mixed item-level approve/reject decisions;
-- [ ] only approved items are published;
+- [x] only approved items are published
+  (Phase 10 local `PublicationService` / HTTP / MCP; rejected items omitted; workflow
+  `completed` is not publication; not independently re-verified);
 - [x] a killed real worker process resumes without lost or duplicated completed work
   (Phase 06 local `tests/test_process_kill_resume.py`; not independently re-verified);
 - [x] the machine interface drives the full flow and exposes explicit item-level review operations
   (Phase 08 local MCP stdio/HTTP tools; not independently re-verified); and
 - [x] unsupported claims remain unsupported, supported claims/findings resolve against immutable
   source or register locators, and success is reported only for verified durable state
-  (publication of a register version is still unimplemented).
+  (publication of a reviewed register version is implemented in Phase 10; workflow completion
+  is not treated as published; not independently re-verified).
 
-### Planned movement evidence
+### Movement evidence
 
-Understand, examine, and stay alive must each be genuinely represented. The current plan targets:
+Understand, examine, and stay alive must each be genuinely represented. The historical plan
+targeted the evidence below; checked items now have local executable evidence:
 
 - [x] mixed-format ingestion and deterministic declared-format validation;
 - [x] document classification reasoning;
 - [x] surfaced contradictions with all sides cited;
 - [x] a clean, fully evaluated corpus returns an honest no-findings result;
-- [ ] changing a rule/domain configuration changes behavior without a code rewrite;
+- [x] changing a rule/domain configuration changes behavior without a code rewrite
+  (Phase 10 local `software-project-assurance.v1.json` + `RULESET_PATH`;
+  `test_changing_ruleset_json_changes_behavior_without_evaluator_rewrite`; not independently
+  re-verified);
 - [x] new content triggers focused incremental processing;
 - [x] change history answers what changed, when, and because of which source;
 - [x] incremental proof compares affected item IDs, preserved item IDs, executed stage IDs, model-operation/idempotency keys, processed source versions, and canonical before/after hashes; and
@@ -324,19 +333,25 @@ Understand, examine, and stay alive must each be genuinely represented. The curr
 
 A cut inside these movement details is allowed only with explicit rationale while preserving a genuine minimum of each movement.
 
-### Planned strong-differentiator evidence
+### Strong-differentiator evidence
 
 Each item below is a **Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
 
-- [ ] Behavior 6: fresh-clone setup reaches a working system in minutes with one verified command.
+- [x] Behavior 6: fresh-clone setup reaches a working system in minutes with one verified command
+  (`docker compose up --build`; local clean Compose acceptance 2026-08-22; volumes were
+  disposable for that run; not independently re-verified).
 - [x] Behavior 7: real keyless tests exercise the system, not only model mocks
   (deterministic adapter plus real parsers, PostgreSQL, process-kill, MCP, and validators;
   live paid model calls are not required; not independently re-verified).
 - [x] Behavior 8: document prompt injection cannot alter policy, call tools, or self-approve
   (Phase 09 local executable suite after corpus-agnostic correction; not independently
   re-verified).
-- [ ] Behavior 9: concurrent distinct and same-corpus runs remain isolated and publish safely.
-- [ ] Behavior 10: stage timing, attempts, usage, pricing basis, and honest cost are reported.
+- [x] Behavior 9: concurrent distinct and same-corpus runs remain isolated and publish safely
+  (Phase 06 workflow isolation plus Phase 10 `tests/test_publication_concurrency.py`; not
+  independently re-verified).
+- [x] Behavior 10: stage timing, attempts, usage, pricing basis, and honest cost are reported
+  (Phase 10 `GET .../workflow-runs/{id}/usage` and workflow status panel; deterministic
+  `estimated_cost_usd=0` with explicit pricing basis; not independently re-verified).
 
 For planned keyless evidence, a deterministic model adapter may be used at the model boundary, while tests still exercise real LangGraph transitions, parsers, PostgreSQL/pgvector, subprocess restart, concurrency, API/MCP transport, transactions, and deterministic validators. Raw measurement data will be committed to the repository.
 
@@ -399,7 +414,7 @@ Exit only after a real human-driven acceptance flow has been demonstrated.
 
 Implement PostgreSQL checkpoints/jobs, idempotency, process failpoints, resume, and run isolation using the simplest adequate mechanism.
 
-Required exit is proven kill/resume. Concurrent same-corpus run isolation is implemented for independent workflow runs, checkpoints, and operation keys. Register publication remains later: a resumed run stops at the explicit human-review gate and does not apply approved items to a published register version. Concurrent same-corpus publication proof remains the planned Behavior 9 remainder and may be cut only with explicit rationale.
+Historical Phase 06 scope: required exit was proven kill/resume. Concurrent same-corpus run isolation was implemented for independent workflow runs, checkpoints, and operation keys. Register publication remained later at that point: a resumed run stopped at the explicit human-review gate and did not apply approved items to a published register version. Current Phase 10 state implements explicit approved/edited-only publication and concurrent same-corpus publication proof.
 
 ### Phase 07 — incremental watched updates (2h)
 
@@ -451,9 +466,9 @@ The non-cuttable Task 1 floor is done only when:
 
 ## Prioritized completion target
 
-Behaviors 6–10 remaining polish, register publication, graceful degradation scenarios, and
-the full reproducibility/evidence suite remain planned. MCP business operations are
-implemented in Phase 08 as a local stdio adapter. Focused incremental watched updates are
-implemented in Phase 07. Each behavior 6–10 item is a **Strong differentiator — may be cut only with
-explicit rationale if time forces a trade-off.** Their omission must not be hidden inside the
-minimum Definition of Done.
+Behaviors 6–10 remaining polish beyond the implemented Compose path, hosted cloud, graceful
+degradation extras, and independent re-verification remain outside this local Phase 10 delivery.
+MCP business operations are implemented. Focused incremental watched updates are implemented.
+Explicit approved-only register publication is implemented. Each behavior 6–10 item is a
+**Strong differentiator — may be cut only with explicit rationale if time forces a trade-off.**
+Their omission must not be hidden inside the minimum Definition of Done.

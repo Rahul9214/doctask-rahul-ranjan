@@ -17,18 +17,17 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Project Assurance Register"
-    app_version: str = "0.9.0"
-    current_phase: str = "Phase 09 — Hardening"
+    app_version: str = "1.0.0"
+    current_phase: str = "Phase 10 — Final Delivery"
     implementation_status: str = (
-        "Phase 09 adversarial hardening is implemented over the Phase 01–08 application: "
-        "prompt-injection and no-bluffing suites, provenance/tamper matrix, malformed-input "
-        "bounds, MCP security/error leakage controls, human-review gate regression, "
-        "kill/resume and exclusive live-retry proof, incremental no-full-rerun evidence, "
-        "concurrency isolation, and recorded local measurements. MCP remains a "
-        "local-development stdio server over the same application services as HTTP. "
-        "Generation never auto-approves. MCP is trusted-client scope with corpus isolation "
-        "and no production authentication. Register publication and production deployment "
-        "are not implemented."
+        "Phase 10 final delivery is implemented over the Phase 01–09 application: "
+        "explicit approved-only register publication after completed human review, "
+        "concurrent publication isolation, stage timing/usage/cost reporting, "
+        "versioned ruleset configuration, and reproducible local Compose deployment. "
+        "MCP remains a local-development stdio server over the same application "
+        "services as HTTP. Generation never auto-approves or auto-publishes. "
+        "MCP is trusted-client scope with corpus isolation and no production "
+        "authentication. Hosted cloud deployment is not implemented."
     )
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
@@ -45,10 +44,11 @@ class Settings(BaseSettings):
     watch_input_path: Path | None = None
     watch_poll_seconds: float = Field(default=2.0, gt=0, le=60)
     watch_stable_polls: int = Field(default=2, ge=2, le=10)
+    ruleset_path: Path | None = None
 
-    @field_validator("watch_input_path", mode="before")
+    @field_validator("watch_input_path", "ruleset_path", mode="before")
     @classmethod
-    def empty_watch_path(cls, value: object) -> object:
+    def empty_optional_path(cls, value: object) -> object:
         if value == "":
             return None
         return value

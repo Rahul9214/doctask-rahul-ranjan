@@ -120,7 +120,7 @@ describe("App", () => {
 
     expect(
       screen.getByText(
-        "Understand, Examine, item-level human review, durable resume, focused incremental updates, MCP business operations, and Phase 09 adversarial hardening are implemented. Register publication and production deployment are not.",
+        "Understand, Examine, item-level human review, durable resume, focused incremental updates, MCP business operations, approved-only register publication, and local Compose deployment are implemented. Hosted cloud deployment is not.",
       ),
     ).toBeInTheDocument();
   });
