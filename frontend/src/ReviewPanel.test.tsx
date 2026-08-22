@@ -280,4 +280,75 @@ describe("ReviewPanel", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("disables controls while a decision is submitting and after completion", async () => {
+    let finishApprove: ((value: Response) => void) | undefined;
+    const approvePromise = new Promise<Response>((resolve) => {
+      finishApprove = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && path.endsWith("/review-sessions")) {
+        return Promise.resolve(jsonResponse(session, true, 201));
+      }
+      if (method === "GET" && path.endsWith("/items")) {
+        return Promise.resolve(jsonResponse([pendingItem]));
+      }
+      if (method === "POST" && path.endsWith("/decisions")) {
+        return approvePromise;
+      }
+      return Promise.resolve(
+        jsonResponse({ detail: "unexpected" }, false, 500),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = await openReview();
+    await screen.findByRole("heading", {
+      name: "Production readiness date must be consistent",
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Approve Production readiness date must be consistent",
+      }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Approve Production readiness date must be consistent",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Open review session" }),
+    ).toBeDisabled();
+    finishApprove?.(
+      jsonResponse(
+        {
+          session: {
+            ...session,
+            status: "completed",
+            pending_count: 0,
+            completion_allowed: false,
+            approved_count: 1,
+          },
+          item: { ...pendingItem, review_status: "approved" },
+        },
+        true,
+        201,
+      ),
+    );
+    expect(
+      await screen.findByText(
+        "approve recorded for Production readiness date must be consistent.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Approve Production readiness date must be consistent",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Complete review session" }),
+    ).toBeDisabled();
+  });
 });

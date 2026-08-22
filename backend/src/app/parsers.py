@@ -37,6 +37,7 @@ MAX_DOCX_ENTRIES = 1_000
 MAX_DOCX_ENTRY_BYTES = 20 * 1024 * 1024
 MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 MAX_DOCX_COMPRESSION_RATIO = 200
+MAX_PDF_PAGES = 200
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +156,12 @@ def _parse_pdf(path: Path) -> list[ParsedBlock]:
                 "encrypted_pdf",
                 "Encrypted PDFs are not supported.",
                 "Remove encryption and upload a text-based PDF.",
+            )
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise ParserError(
+                "pdf_resource_limit",
+                "The PDF contains too many pages for the safe parser limit.",
+                "Split the document or upload a smaller text-based PDF.",
             )
         blocks: list[ParsedBlock] = []
         for page_index, page in enumerate(reader.pages):

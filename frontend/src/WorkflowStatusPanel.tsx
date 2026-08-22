@@ -171,7 +171,11 @@ export default function WorkflowStatusPanel() {
   }
 
   return (
-    <section className="workflow-panel" aria-labelledby="workflow-title">
+    <section
+      className="workflow-panel"
+      aria-labelledby="workflow-title"
+      aria-busy={busy}
+    >
       <h2 id="workflow-title">Workflow status</h2>
       <p>
         Inspect a durable workflow run, recent events, review state, and the

@@ -666,6 +666,34 @@ async def test_openai_adapter_rejects_malformed_structured_output_without_retry(
     assert error.value.attempt_count == 1
 
 
+@pytest.mark.asyncio
+async def test_openai_adapter_does_not_retry_unclassified_httpx_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.model_gateway.asyncio.sleep", _no_sleep)
+    attempts = {"count": 0}
+
+    class UnclassifiedHTTPError(httpx.HTTPError):
+        pass
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        raise UnclassifiedHTTPError("unclassified-provider-failure")
+
+    adapter = _live_adapter(handler, max_retries=2)
+    with pytest.raises(ModelError) as error:
+        await adapter.classify_blocks([_block("Project sponsor: A")])
+    assert error.value.code == "operation_ambiguous"
+    assert error.value.retryable is False
+    assert error.value.retry_disposition is LiveRetryDisposition.AMBIGUOUS
+    assert attempts["count"] == 1
+    assert "unclassified-provider-failure" not in error.value.detail
+    assert "sk-test-secret-should-not-leak" not in error.value.detail
+
+
 def test_untrusted_evidence_is_wrapped_as_data() -> None:
     from app.model_gateway import SYSTEM_POLICY, wrap_untrusted_evidence
 

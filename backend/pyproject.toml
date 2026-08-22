@@ -1,7 +1,7 @@
 [project]
 name = "project-assurance-register"
-version = "0.8.0"
-description = "MCP operations over grounded Understand, Examine, human review, and incremental updates"
+version = "0.9.0"
+description = "Hardened grounded Understand, Examine, human review, incremental updates, and MCP operations"
 requires-python = "==3.13.*"
 dependencies = [
     "alembic==1.19.1",
@@ -56,6 +56,7 @@ asyncio_mode = "auto"
 markers = [
     "integration: requires a reachable PostgreSQL database with pgvector",
     "mcp: real MCP client/server protocol evidence",
+    "adversarial: hostile-input, no-bluffing, and security-boundary tests",
 ]
 testpaths = ["tests"]
 

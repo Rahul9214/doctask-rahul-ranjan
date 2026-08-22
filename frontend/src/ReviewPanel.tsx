@@ -221,7 +221,11 @@ export default function ReviewPanel() {
   }
 
   return (
-    <section className="review-panel" aria-labelledby="review-title">
+    <section
+      className="review-panel"
+      aria-labelledby="review-title"
+      aria-busy={busy}
+    >
       <h2 id="review-title">Human review</h2>
       <p>
         Findings stay pending until an explicit approve, reject, or

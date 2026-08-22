@@ -53,6 +53,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src tests
       - run: uv run pytest --cov=app --cov-report=term-missing
+      - name: Secret-pattern regression over tracked source
+        run: uv run pytest tests/test_secret_scan.py tests/test_dependency_review.py -v --no-cov
       - name: MCP stdio server/client evidence
         run: uv run pytest tests/test_mcp_e2e.py -v --no-cov
       - run: uv build
