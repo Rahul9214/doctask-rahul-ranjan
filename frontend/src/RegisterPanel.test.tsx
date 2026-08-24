@@ -33,6 +33,11 @@ const register = {
       outcome: "fail",
       severity: "high",
       message: "Cited dates conflict.",
+      structured_reason: {
+        category: "milestone_date",
+        subject_key: "production_readiness",
+      },
+      evidence_kind: "grounded_facts",
       review_status: "approved",
       content_origin: "system_grounded",
       system_grounded: true,
@@ -47,13 +52,50 @@ const register = {
           normalized_value: "2026-10-30",
           support_status: "supported",
         },
+        {
+          id: "fact-3",
+          category: "delivery_milestone",
+          subject_key: "production_readiness",
+          normalized_value: "2026-11-14",
+          support_status: "supported",
+        },
       ],
       citations: [
         {
           source_logical_name: "Project Charter",
+          source_version_id: "version-1",
           native_locator: "page[1]/block[0]",
           exact_quote: "Ready 2026-10-30",
           source_sha256: "a".repeat(64),
+        },
+        {
+          source_logical_name: "Weekly Status Report",
+          source_version_id: "version-3",
+          native_locator: "paragraph[4]",
+          exact_quote: "Ready 2026-11-14",
+          source_sha256: "c".repeat(64),
+        },
+      ],
+      contradictions: [
+        {
+          id: "contradiction-1",
+          contradiction_type: "conflicting_values",
+          reason: "Two grounded sources give different readiness dates.",
+          status: "open",
+          fact_a: {
+            id: "fact-1",
+            category: "delivery_milestone",
+            subject_key: "production_readiness",
+            normalized_value: "2026-10-30",
+            support_status: "supported",
+          },
+          fact_b: {
+            id: "fact-3",
+            category: "delivery_milestone",
+            subject_key: "production_readiness",
+            normalized_value: "2026-11-14",
+            support_status: "supported",
+          },
         },
       ],
     },
@@ -65,6 +107,8 @@ const register = {
       outcome: "warning",
       severity: "medium",
       message: "Original grounded status is amber.",
+      structured_reason: { observed_status: "Amber" },
+      evidence_kind: "grounded_facts",
       review_status: "edited",
       content_origin: "mixed",
       system_grounded: false,
@@ -83,11 +127,13 @@ const register = {
       citations: [
         {
           source_logical_name: "Weekly Status Report",
+          source_version_id: "version-2",
           native_locator: "paragraph[2]",
           exact_quote: "Overall status: Amber",
           source_sha256: "b".repeat(64),
         },
       ],
+      contradictions: [],
     },
   ],
 };
@@ -137,15 +183,21 @@ describe("RegisterPanel", () => {
     );
 
     render(<RegisterPanel />);
-    await user.type(screen.getByLabelText("Register corpus ID"), "corpus-1");
-    await user.type(screen.getByLabelText("Review session ID"), "session-1");
-    await user.click(screen.getByRole("button", { name: "Load register" }));
+    await user.type(screen.getByLabelText("Corpus"), "corpus-1");
+    await user.type(screen.getByLabelText("Review session"), "session-1");
+    await user.click(
+      screen.getByRole("button", { name: "Load current register" }),
+    );
     expect(
       await screen.findByText(/The session is ready for explicit publication/),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish register" }));
     expect(await screen.findByText("SYSTEM-GROUNDED")).toBeInTheDocument();
     expect(screen.getByText("Ready 2026-10-30")).toBeInTheDocument();
+    expect(screen.getByText("Ready 2026-11-14")).toBeInTheDocument();
+    expect(
+      screen.getByText("Contradictory evidence retained"),
+    ).toBeInTheDocument();
     expect(screen.getByText("register.v1.1.abc")).toBeInTheDocument();
     const groundedOriginal = screen.getByRole("region", {
       name: "SYSTEM-GROUNDED ORIGINAL spa.status.clarity",
@@ -162,7 +214,7 @@ describe("RegisterPanel", () => {
       ),
     ).toBeInTheDocument();
     const reviewerEdit = screen.getByRole("region", {
-      name: "REVIEWER-AUTHORED EDIT spa.status.clarity",
+      name: "REVIEWER-AUTHORED OVERLAY spa.status.clarity",
     });
     expect(
       within(reviewerEdit).getByText("Reviewer clarifies the delivery status."),
@@ -175,6 +227,71 @@ describe("RegisterPanel", () => {
     expect(
       within(reviewerEdit).queryByText("Overall status: Amber"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("spa.ownership.budget")).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("list", { name: "Applied register items" }),
+      ).queryByText("spa.ownership.budget"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("spa.ownership.budget")).toBeInTheDocument();
+  });
+
+  it("keeps current-register inspection separate from explicit publication", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (
+        path.endsWith("/review-sessions/session-1") &&
+        init?.method !== "POST"
+      ) {
+        return Promise.resolve(jsonResponse(completedSession));
+      }
+      if (path.endsWith("/register") && init?.method !== "POST") {
+        return Promise.resolve(
+          jsonResponse(
+            { code: "publication_not_found", detail: "Not published." },
+            false,
+            404,
+          ),
+        );
+      }
+      if (path.endsWith("/publish")) {
+        return Promise.resolve(jsonResponse(register, true, 201));
+      }
+      return Promise.resolve(jsonResponse({ code: "unexpected" }, false, 500));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<RegisterPanel />);
+    expect(document.querySelector(".register-inspect-form")).not.toBeNull();
+    expect(screen.getByLabelText("Review session")).toHaveAttribute(
+      "aria-describedby",
+      "register-session-help",
+    );
+    const help = document.getElementById("register-session-help");
+    expect(help).toHaveTextContent(/publication gate/);
+    expect(help?.closest(".field")).toContainElement(
+      screen.getByLabelText("Review session"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Load current register" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Publish register" }),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Corpus"), "corpus-1");
+    await user.type(screen.getByLabelText("Review session"), "session-1");
+    await user.click(
+      screen.getByRole("button", { name: "Load current register" }),
+    );
+    expect(
+      await screen.findByText(/The session is ready for explicit publication/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publish register" }),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/publish")),
+    ).toBe(false);
   });
 });

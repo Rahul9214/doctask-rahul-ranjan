@@ -27,6 +27,10 @@ const pendingItem = {
   outcome: "fail",
   severity: "high",
   message: "Cited dates conflict.",
+  structured_reason: {
+    category: "milestone_date",
+    subject_key: "production_readiness",
+  },
   evidence_kind: "grounded_facts",
   review_required: true,
   review_status: "pending",
@@ -44,6 +48,55 @@ const pendingItem = {
       exact_quote: "Ready 2026-10-30",
       source_logical_name: "Decision Log",
       source_block_id: "block-1",
+    },
+    {
+      source_version_id: "version-2",
+      source_sha256: "b".repeat(64),
+      format: "docx",
+      native_locator: "paragraph[4]",
+      normalized_start: 0,
+      normalized_end: 12,
+      exact_quote: "Ready 2026-11-14",
+      source_logical_name: "Weekly Status Report",
+      source_block_id: "block-2",
+    },
+  ],
+  grounded_facts: [
+    {
+      id: "fact-1",
+      category: "milestone_date",
+      subject_key: "production_readiness",
+      normalized_value: "2026-10-30",
+      support_status: "supported",
+    },
+    {
+      id: "fact-2",
+      category: "milestone_date",
+      subject_key: "production_readiness",
+      normalized_value: "2026-11-14",
+      support_status: "supported",
+    },
+  ],
+  contradictions: [
+    {
+      id: "contradiction-1",
+      contradiction_type: "conflicting_values",
+      reason: "Two grounded sources give different readiness dates.",
+      status: "open",
+      fact_a: {
+        id: "fact-1",
+        category: "milestone_date",
+        subject_key: "production_readiness",
+        normalized_value: "2026-10-30",
+        support_status: "supported",
+      },
+      fact_b: {
+        id: "fact-2",
+        category: "milestone_date",
+        subject_key: "production_readiness",
+        normalized_value: "2026-11-14",
+        support_status: "supported",
+      },
     },
   ],
   decisions: [],
@@ -64,9 +117,13 @@ afterEach(() => {
 async function openReview() {
   const user = userEvent.setup();
   render(<ReviewPanel />);
-  await user.type(screen.getByLabelText("Corpus ID"), "corpus-1");
+  await user.type(screen.getByLabelText("Corpus"), "corpus-1");
+  expect(
+    screen.getByText("Advanced lookup").closest("details"),
+  ).not.toHaveAttribute("open");
+  await user.click(screen.getByText("Advanced lookup"));
   await user.type(screen.getByLabelText("Examination run ID"), "exam-1");
-  await user.click(screen.getByRole("button", { name: "Open review session" }));
+  await user.click(screen.getByRole("button", { name: "Open review" }));
   return user;
 }
 
@@ -95,12 +152,93 @@ describe("ReviewPanel", () => {
         name: "Production readiness date must be consistent",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Ready 2026-10-30/)).toBeInTheDocument();
-    expect(screen.getByText(/Decision Log/)).toBeInTheDocument();
-    expect(screen.getByText(/outcome fail/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Ready 2026-10-30/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Decision Log/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Weekly Status Report")).toBeInTheDocument();
+    expect(screen.getByText("Contradictory evidence")).toBeInTheDocument();
+    expect(screen.getByText("2026-10-30")).toBeInTheDocument();
+    expect(screen.getByText("2026-11-14")).toBeInTheDocument();
+    expect(screen.queryByText(/Ready 2026-11-14/)).not.toBeInTheDocument();
+    expect(screen.getByText("FAIL")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Complete review session" }),
+      screen.getByRole("button", { name: "Complete review" }),
     ).toBeDisabled();
+  });
+
+  it("renders all assurance outcomes and progressively discloses audit details", async () => {
+    const items = [
+      pendingItem,
+      {
+        ...pendingItem,
+        id: "item-pass",
+        finding_id: "finding-pass",
+        rule_id: "spa.pass",
+        title: "Delivery owner is identified",
+        outcome: "pass",
+        severity: "low",
+        message: "A delivery owner is established.",
+        contradictions: [],
+        citations: [],
+        review_required: false,
+      },
+      {
+        ...pendingItem,
+        id: "item-warning",
+        finding_id: "finding-warning",
+        rule_id: "spa.warning",
+        title: "Status requires attention",
+        outcome: "warning",
+        severity: "medium",
+        message: "Delivery status is amber.",
+        contradictions: [],
+        citations: [],
+        review_required: false,
+      },
+      {
+        ...pendingItem,
+        id: "item-unknown",
+        finding_id: "finding-unknown",
+        rule_id: "spa.unknown",
+        title: "Budget owner is identified",
+        outcome: "unknown",
+        severity: "medium",
+        message: "No supported source establishes a budget owner.",
+        contradictions: [],
+        citations: [],
+        review_required: false,
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/review-sessions") && !path.includes("/items")) {
+          return Promise.resolve(jsonResponse(session, true, 201));
+        }
+        if (path.endsWith("/items")) {
+          return Promise.resolve(jsonResponse(items));
+        }
+        return Promise.resolve(
+          jsonResponse({ detail: "unexpected" }, false, 500),
+        );
+      }),
+    );
+
+    const user = await openReview();
+    expect(await screen.findByText("PASS")).toBeInTheDocument();
+    expect(screen.getByText("FAIL")).toBeInTheDocument();
+    expect(screen.getByText("WARNING")).toBeInTheDocument();
+    expect(screen.getAllByText("UNKNOWN").length).toBeGreaterThan(0);
+    expect(screen.getByText("No grounded evidence found")).toBeInTheDocument();
+    expect(screen.getByText("No citation claimed.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("spa.milestone.production-readiness"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Details" })[0]);
+    expect(
+      screen.getByText("spa.milestone.production-readiness"),
+    ).toBeInTheDocument();
   });
 
   it("records approve, reject, and reviewer-authored edit actions", async () => {
@@ -180,11 +318,19 @@ describe("ReviewPanel", () => {
       ),
     ).toBeInTheDocument();
 
+    expect(
+      screen.queryByLabelText("Reviewer-authored edit"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Edit Production readiness date must be consistent",
+      }),
+    );
     const editBox = screen.getByLabelText("Reviewer-authored edit");
     await user.type(editBox, "Reviewer restates the gap.");
     expect(
       screen.getByRole("button", {
-        name: "Edit Production readiness date must be consistent",
+        name: "Submit reviewer edit for Production readiness date must be consistent",
       }),
     ).toBeDisabled();
     await user.click(
@@ -194,7 +340,7 @@ describe("ReviewPanel", () => {
     );
     await user.click(
       screen.getByRole("button", {
-        name: "Edit Production readiness date must be consistent",
+        name: "Submit reviewer edit for Production readiness date must be consistent",
       }),
     );
     expect(
@@ -202,9 +348,9 @@ describe("ReviewPanel", () => {
         "edit recorded for Production readiness date must be consistent.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/This text is not system-grounded evidence/),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("NOT SYSTEM-GROUNDED").length).toBeGreaterThan(
+      0,
+    );
 
     const decisionBodies = fetchMock.mock.calls
       .filter(
@@ -238,6 +384,29 @@ describe("ReviewPanel", () => {
     });
   });
 
+  it("keeps advanced lookup collapsed when a workspace examination is already selected", () => {
+    render(
+      <ReviewPanel
+        workspace={{
+          corpusId: "corpus-1",
+          workflowRunId: "run-1",
+          examinationRunId: "exam-1",
+          reviewSessionId: "session-1",
+          workflowStatus: "waiting_for_review",
+          reviewStatus: "waiting_for_review",
+        }}
+        active={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open selected review" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Advanced lookup").closest("details"),
+    ).not.toHaveAttribute("open");
+  });
+
   it("shows loading and error states without stack traces", async () => {
     vi.stubGlobal(
       "fetch",
@@ -259,14 +428,11 @@ describe("ReviewPanel", () => {
 
     const user = userEvent.setup();
     render(<ReviewPanel />);
-    expect(
-      screen.getByRole("button", { name: "Open review session" }),
-    ).toBeEnabled();
-    await user.type(screen.getByLabelText("Corpus ID"), "corpus-1");
+    expect(screen.getByRole("button", { name: "Open review" })).toBeEnabled();
+    await user.type(screen.getByLabelText("Corpus"), "corpus-1");
+    await user.click(screen.getByText("Advanced lookup"));
     await user.type(screen.getByLabelText("Examination run ID"), "exam-1");
-    await user.click(
-      screen.getByRole("button", { name: "Open review session" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Open review" }));
 
     expect(
       await screen.findByText(
@@ -318,9 +484,7 @@ describe("ReviewPanel", () => {
         name: "Approve Production readiness date must be consistent",
       }),
     ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Open review session" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open review" })).toBeDisabled();
     finishApprove?.(
       jsonResponse(
         {
@@ -348,7 +512,7 @@ describe("ReviewPanel", () => {
       }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Complete review session" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Complete review" }),
+    ).not.toBeInTheDocument();
   });
 });

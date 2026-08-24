@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 import pytest
 from helpers import (
@@ -15,7 +16,7 @@ from sqlalchemy import select, text
 
 from app.errors import ModelError, NotFoundError, ValidationError
 from app.model_gateway import BlockContext, ClassificationBatch, ExtractionBatch
-from app.models import DurableOperation, ReviewDecision, WorkflowRun
+from app.models import DurableOperation, ExaminationRun, ReviewDecision, WorkflowRun
 from app.operation_ledger import OperationLedger, canonical_json, make_operation_key, sha256_hex
 from app.services import Phase02Service
 from app.storage import LocalFileStorage
@@ -315,6 +316,36 @@ async def test_model_failure_is_durable_and_resumable(
     events = await workflow.list_events(corpus.id, failed.id)
     assert any(event.event_type == "stage_failed" for event in events)
     assert any(event.event_type == "stage_completed" for event in events)
+
+
+@pytest.mark.integration
+async def test_failed_examine_stage_is_not_recorded_as_completed(
+    phase02_service: tuple[Phase02Service, LocalFileStorage],
+    corpus_fixtures: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    phase02, _storage = phase02_service
+    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    workflow = make_workflow(phase02)
+    create_examination = workflow.examine.create_run
+
+    async def create_failed_examination(corpus_id: UUID, analysis_run_id: UUID) -> ExaminationRun:
+        examination = await create_examination(corpus_id, analysis_run_id)
+        examination.status = "failed"
+        examination.error_code = "examine_probe_failed"
+        examination.error_detail = "Synthetic Examine failure."
+        return examination
+
+    monkeypatch.setattr(workflow.examine, "create_run", create_failed_examination)
+
+    failed = await workflow.create_run(corpus.id)
+    events = await workflow.list_events(corpus.id, failed.id)
+    examine_events = [event for event in events if event.stage_name == "examine"]
+
+    assert failed.status == "failed"
+    assert failed.error_code == "examine_probe_failed"
+    assert any(event.event_type == "stage_failed" for event in examine_events)
+    assert all(event.event_type != "stage_completed" for event in examine_events)
 
 
 @pytest.mark.integration

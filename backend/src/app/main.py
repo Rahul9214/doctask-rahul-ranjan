@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from functools import partial
@@ -7,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api import router as phase02_router
 from app.checkpointer import configure_windows_psycopg_loop
@@ -31,6 +33,45 @@ from app.watcher import WatcherService
 from app.workflow_service import WorkflowService
 
 configure_windows_psycopg_loop()
+
+logger = logging.getLogger("app.http")
+
+
+class UnexpectedExceptionBoundary:
+    """Sanitize unexpected HTTP failures before they reach ServerErrorMiddleware."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def tracked_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracked_send)
+        except Exception:
+            logger.error("Unhandled HTTP request failure")
+            if response_started:
+                await send({"type": "http.response.body", "body": b"", "more_body": False})
+                return
+            response = JSONResponse(
+                status_code=500,
+                content={
+                    "code": "internal_error",
+                    "detail": "The operation could not be completed safely.",
+                    "action": "Retry the request or inspect service health.",
+                },
+            )
+            await response(scope, receive, send)
 
 
 class HealthResponse(BaseModel):
@@ -117,6 +158,7 @@ def create_app(
         UploadRequestSizeGuard,
         max_upload_bytes=app_settings.max_upload_bytes,
     )
+    application.add_middleware(UnexpectedExceptionBoundary)
 
     @application.exception_handler(Phase02Error)
     async def phase02_error_handler(_request: Request, error: Phase02Error) -> JSONResponse:

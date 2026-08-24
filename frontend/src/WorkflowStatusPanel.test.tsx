@@ -54,13 +54,32 @@ function stubStatus(overrides?: {
   run?: Partial<typeof run>;
   session?: Partial<typeof session>;
   resume?: typeof run | null;
+  events?: typeof events;
+  failures?: Array<"events" | "usage" | "review" | "revision">;
+  resumeFailures?: Array<"events" | "usage" | "review" | "revision">;
 }) {
+  let resumed = false;
+  const failedResponse = () =>
+    jsonResponse(
+      {
+        code: "supplemental_unavailable",
+        detail: "Supplemental workflow data is unavailable.",
+      },
+      false,
+      503,
+    );
+  const shouldFail = (resource: "events" | "usage" | "review" | "revision") =>
+    (resumed ? overrides?.resumeFailures : overrides?.failures)?.includes(
+      resource,
+    );
+
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path.endsWith("/resume")) {
         expect(init?.method).toBe("POST");
+        resumed = true;
         return Promise.resolve(
           jsonResponse(overrides?.resume ?? { ...run, status: "completed" }),
         );
@@ -69,9 +88,16 @@ function stubStatus(overrides?: {
         return Promise.resolve(jsonResponse({ ...run, ...overrides?.run }));
       }
       if (path.endsWith("/events")) {
-        return Promise.resolve(jsonResponse(events));
+        return Promise.resolve(
+          shouldFail("events")
+            ? failedResponse()
+            : jsonResponse(overrides?.events ?? events),
+        );
       }
       if (path.endsWith("/usage")) {
+        if (shouldFail("usage")) {
+          return Promise.resolve(failedResponse());
+        }
         return Promise.resolve(
           jsonResponse({
             total_duration_ms: 12,
@@ -97,12 +123,17 @@ function stubStatus(overrides?: {
         );
       }
       if (path.endsWith("/review-sessions/session-1")) {
+        if (shouldFail("review")) {
+          return Promise.resolve(failedResponse());
+        }
         return Promise.resolve(
           jsonResponse({ ...session, ...overrides?.session }),
         );
       }
       if (path.endsWith("/revisions/current")) {
-        return Promise.resolve(jsonResponse(revision));
+        return Promise.resolve(
+          shouldFail("revision") ? failedResponse() : jsonResponse(revision),
+        );
       }
       return Promise.resolve(jsonResponse({ code: "not_found" }, false, 404));
     }),
@@ -113,36 +144,74 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function loadStatus(runId = "run-1") {
+async function loadStatus(
+  runId = "run-1",
+  extra: {
+    onOpenReview?: () => void;
+    onOpenRegister?: () => void;
+  } = {},
+) {
   const user = userEvent.setup();
-  render(<WorkflowStatusPanel />);
-  await user.type(screen.getByLabelText("Workflow corpus ID"), "corpus-1");
-  await user.type(screen.getByLabelText("Workflow run ID"), runId);
-  await user.click(
-    screen.getByRole("button", { name: "Load workflow status" }),
+  render(
+    <WorkflowStatusPanel
+      onOpenReview={extra.onOpenReview}
+      onOpenRegister={extra.onOpenRegister}
+    />,
   );
+  await user.type(screen.getByLabelText("Corpus"), "corpus-1");
+  expect(
+    screen.getByText("Advanced lookup").closest("details"),
+  ).not.toHaveAttribute("open");
+  await user.click(screen.getByText("Advanced lookup"));
+  await user.type(screen.getByLabelText("Workflow run ID"), runId);
+  await user.click(screen.getByRole("button", { name: "Load workflow" }));
   return user;
 }
 
 describe("WorkflowStatusPanel", () => {
   it("shows run status, review, revision, and events without resume while review is pending", async () => {
     stubStatus();
-    await loadStatus();
+    const user = await loadStatus();
 
-    expect(screen.getAllByText("waiting_for_review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("wait_for_review").length).toBeGreaterThan(0);
-    expect(screen.getByText("revision 2")).toBeInTheDocument();
     expect(
-      screen.getByText(/waiting_for_review · wait_for_review/),
-    ).toBeInTheDocument();
+      screen.getAllByText("Waiting for human review").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Human Gate").length).toBeGreaterThan(0);
+    expect(screen.getByText("Revision 2")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/waiting_for_review · wait_for_review/),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Resume workflow" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Resume is available after the linked review session is completed.",
-      ),
+      screen.getByText(/Resume is available after the linked review session/),
     ).toBeInTheDocument();
+    const stageDetails = screen.getByRole("button", { name: "View steps" });
+    expect(stageDetails).toHaveAttribute("aria-expanded", "false");
+    await user.click(stageDetails);
+    expect(stageDetails).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("Extract").length).toBeGreaterThan(0);
+  });
+
+  it("shows five durable events by default and expands the complete history", async () => {
+    const manyEvents = Array.from({ length: 6 }, (_, index) => ({
+      id: `event-${index}`,
+      event_type: index === 0 ? "workflow_started" : `checkpoint_${index}`,
+      stage_name: index < 3 ? "understand" : "examine",
+      created_at: `2026-08-21T00:0${index}:00Z`,
+    }));
+    stubStatus({ events: manyEvents });
+    const user = await loadStatus();
+
+    expect(screen.queryByText("Workflow started")).not.toBeInTheDocument();
+    const showAll = screen.getByRole("button", {
+      name: "View all 6 events",
+    });
+    expect(showAll).toHaveAttribute("aria-expanded", "false");
+    await user.click(showAll);
+    expect(screen.getByText("Workflow started")).toBeInTheDocument();
+    expect(showAll).toHaveAttribute("aria-expanded", "true");
   });
 
   it("enables resume for a failed workflow", async () => {
@@ -151,6 +220,55 @@ describe("WorkflowStatusPanel", () => {
     expect(
       screen.getByRole("button", { name: "Resume workflow" }),
     ).toBeEnabled();
+  });
+
+  it("keeps a failed workflow resumable when events are unavailable", async () => {
+    stubStatus({
+      run: { status: "failed", current_stage: "examine" },
+      failures: ["events"],
+    });
+    await loadStatus();
+
+    expect(await screen.findByText("Events unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Resume workflow" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps a failed workflow resumable when usage is unavailable", async () => {
+    stubStatus({
+      run: { status: "failed", current_stage: "examine" },
+      failures: ["usage"],
+    });
+    await loadStatus();
+
+    expect(await screen.findByText("Usage unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Resume workflow" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps the workflow visible when revision is unavailable", async () => {
+    stubStatus({ failures: ["revision"] });
+    await loadStatus();
+
+    expect(await screen.findByText(/Revision unavailable/)).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+  });
+
+  it("fails closed for waiting-review resume when review status is unavailable", async () => {
+    stubStatus({ failures: ["review"] });
+    await loadStatus();
+
+    expect(
+      await screen.findByText(/Review status unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume workflow" }),
+    ).not.toBeInTheDocument();
   });
 
   it("enables resume when waiting_for_review and the review session is completed", async () => {
@@ -233,13 +351,13 @@ describe("WorkflowStatusPanel", () => {
 
     await loadStatus();
 
-    expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
-    expect(screen.getByText("none")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getByText("None")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Resume workflow" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Completed workflows cannot be resumed."),
+      screen.getByText(/Completed workflows cannot be resumed/),
     ).toBeInTheDocument();
   });
 
@@ -251,7 +369,29 @@ describe("WorkflowStatusPanel", () => {
     const user = await loadStatus();
     await user.click(screen.getByRole("button", { name: "Resume workflow" }));
     expect(
-      await screen.findByText("Completed workflows cannot be resumed."),
+      await screen.findByText(/Completed workflows cannot be resumed/),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the resumed workflow visible when supplemental refresh fails", async () => {
+    stubStatus({
+      run: { status: "failed", current_stage: "examine" },
+      resume: {
+        ...run,
+        status: "completed",
+        current_stage: "finalize",
+        resume_count: 2,
+      },
+      resumeFailures: ["events"],
+    });
+    const user = await loadStatus();
+
+    await user.click(screen.getByRole("button", { name: "Resume workflow" }));
+
+    expect(await screen.findByText("Events unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Completed workflows cannot be resumed/),
     ).toBeInTheDocument();
   });
 
@@ -389,9 +529,7 @@ describe("WorkflowStatusPanel", () => {
     const runInput = screen.getByLabelText("Workflow run ID");
     await user.clear(runInput);
     await user.type(runInput, "run-2");
-    await user.click(
-      screen.getByRole("button", { name: "Load workflow status" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Load workflow" }));
     expect(
       await screen.findByText("The workflow run was not found."),
     ).toBeInTheDocument();
@@ -408,16 +546,74 @@ describe("WorkflowStatusPanel", () => {
     );
     const user = userEvent.setup();
     render(<WorkflowStatusPanel />);
-    expect(screen.getByLabelText("Workflow corpus ID")).toBeEnabled();
+    expect(screen.getByLabelText("Corpus")).toBeEnabled();
+    await user.click(screen.getByText("Advanced lookup"));
     expect(screen.getByLabelText("Workflow run ID")).toBeEnabled();
-    await user.type(screen.getByLabelText("Workflow corpus ID"), "corpus-1");
+    await user.type(screen.getByLabelText("Corpus"), "corpus-1");
     await user.type(screen.getByLabelText("Workflow run ID"), "run-1");
-    await user.click(
-      screen.getByRole("button", { name: "Load workflow status" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Load workflow" }));
     expect(
-      screen.getByRole("button", { name: "Loading status…" }),
+      screen.getByRole("button", { name: "Loading workflow…" }),
     ).toBeDisabled();
     expect(screen.queryByText(/traceback/i)).not.toBeInTheDocument();
+  });
+
+  it("offers a human-review CTA while waiting and hides resume", async () => {
+    stubStatus();
+    const onOpenReview = vi.fn();
+    const user = await loadStatus("run-1", { onOpenReview });
+
+    expect(
+      screen.getByRole("heading", { name: "Human review required" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open human review" }));
+    expect(onOpenReview).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Resume workflow" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText("Technical details")[0].closest("details"),
+    ).not.toHaveAttribute("open");
+    expect(screen.queryByText("Usage details")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No provider-priced usage was recorded for this run."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Calculated from recorded workflow events."),
+    ).toBeInTheDocument();
+  });
+
+  it("offers resume after review completion", async () => {
+    stubStatus({
+      session: {
+        status: "completed",
+        pending_count: 0,
+        completion_allowed: true,
+      },
+    });
+    await loadStatus();
+    expect(
+      screen.getByRole("heading", { name: "Review complete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Resume workflow" }),
+    ).toBeEnabled();
+  });
+
+  it("offers register navigation after workflow completion and hides resume", async () => {
+    stubStatus({
+      run: { status: "completed", current_stage: "finalize" },
+      session: { status: "completed", pending_count: 0 },
+    });
+    const onOpenRegister = vi.fn();
+    const user = await loadStatus("run-1", { onOpenRegister });
+    expect(
+      await screen.findByRole("heading", { name: "Workflow complete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume workflow" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open register" }));
+    expect(onOpenRegister).toHaveBeenCalledTimes(1);
   });
 });
