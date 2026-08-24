@@ -205,5 +205,8 @@ Chronological local evidence:
 3. Later configured run with `DATABASE_URL`, `TEST_DATABASE_URL`, and
    `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`: 238 collected, 238 passed, 0 failed, coverage 91.29%.
    Ruff format/lint, mypy, and `uv build` (`project_assurance_register-1.0.0`) passed.
+4. Final submission-audit run after the safe HTTP/log boundary, workflow partial-failure
+   correction, and Examine telemetry correction: 249 collected, 249 passed, 0 failed,
+   coverage 91.44%; `uv build` passed.
 
-The third result is the current final local backend result. Independent PASS is not claimed.
+The fourth result is the current final local backend result. Independent PASS is not claimed.

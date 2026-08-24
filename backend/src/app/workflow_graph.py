@@ -215,6 +215,16 @@ class DurableWorkflow:
             current_stage="examine",
             status="running",
         )
+        if examination.status != "completed":
+            stage_error = ModelError(
+                examination.error_code or "examine_failed",
+                examination.error_detail or "Examine failed before completion.",
+                "Resume the workflow run after correcting the recorded cause.",
+                retryable=True,
+                attempt_count=1,
+            )
+            await self._fail(run, stage_error, stage="examine", started=started)
+            raise stage_error
         await self._event(
             run,
             "stage_completed",

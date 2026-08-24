@@ -1,9 +1,22 @@
+import logging
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.config import Settings
 from app.db import DependencyCheck, ReadinessReport
+from app.errors import NotFoundError
 from app.main import create_app
+
+TESTS_DIR = Path(__file__).resolve().parent
 
 
 def test_health_succeeds_without_calling_database_probe() -> None:
@@ -87,3 +100,136 @@ def test_version_is_truthful_about_phase_scope() -> None:
             "authentication. Hosted cloud deployment is not implemented."
         ),
     }
+
+
+def test_unexpected_http_error_is_sanitized_in_response_and_server_logs(
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    application = create_app()
+    sentinels = (
+        "SECRET_SENTINEL_DO_NOT_LEAK",
+        "SOURCE_TEXT_SENTINEL_DO_NOT_LEAK",
+        "postgresql://credential-sentinel",
+    )
+    raw_message = " | ".join(sentinels)
+
+    @application.get("/test/unexpected-error")
+    async def unexpected_error() -> None:
+        raise RuntimeError(raw_message)
+
+    with caplog.at_level(logging.ERROR, logger="app.http"), TestClient(application) as client:
+        response = client.get("/test/unexpected-error")
+    captured = capsys.readouterr()
+    observable_output = "\n".join((response.text, caplog.text, captured.out, captured.err))
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "code": "internal_error",
+        "detail": "The operation could not be completed safely.",
+        "action": "Retry the request or inspect service health.",
+    }
+    assert "Unhandled HTTP request failure" in caplog.text
+    for sentinel in sentinels:
+        assert sentinel not in observable_output
+    assert raw_message not in observable_output
+    assert "traceback" not in observable_output.casefold()
+    assert "runtimeerror" not in observable_output.casefold()
+
+
+def test_known_application_error_preserves_specific_contract() -> None:
+    application = create_app()
+
+    @application.get("/test/known-error")
+    async def known_error() -> None:
+        raise NotFoundError(
+            "known_resource_missing",
+            "The requested test resource was not found.",
+            "Use a known test resource identifier.",
+        )
+
+    with TestClient(application) as client:
+        response = client.get("/test/known-error")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "code": "known_resource_missing",
+        "detail": "The requested test resource was not found.",
+        "action": "Use a known test resource identifier.",
+    }
+
+
+def test_uvicorn_stderr_does_not_receive_unexpected_exception_text() -> None:
+    sentinels = (
+        "SECRET_SENTINEL_DO_NOT_LEAK",
+        "SOURCE_TEXT_SENTINEL_DO_NOT_LEAK",
+        "postgresql://credential-sentinel",
+    )
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "uvicorn_error_app:app",
+            "--app-dir",
+            str(TESTS_DIR),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--log-level",
+            "debug",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    response_status: int | None = None
+    response_body = ""
+    stdout = ""
+    stderr = ""
+    try:
+        health_url = f"http://127.0.0.1:{port}/health"
+        ready = False
+        for _attempt in range(100):
+            if process.poll() is not None:
+                break
+            try:
+                with urllib.request.urlopen(health_url, timeout=0.2) as health:
+                    if health.status == 200:
+                        ready = True
+                        break
+            except (OSError, urllib.error.URLError):
+                time.sleep(0.05)
+        if not ready:
+            pytest.fail("Uvicorn did not become ready for the log-boundary probe.")
+
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/unexpected",
+                timeout=2,
+            )
+        except urllib.error.HTTPError as error:
+            response_status = error.code
+            response_body = error.read().decode("utf-8")
+        time.sleep(0.1)
+    finally:
+        process.terminate()
+        try:
+            stdout, stderr = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate(timeout=5)
+
+    observable_output = "\n".join((response_body, stdout, stderr))
+    assert response_status == 500
+    assert '"code":"internal_error"' in response_body
+    assert "Unhandled HTTP request failure" in observable_output
+    for sentinel in sentinels:
+        assert sentinel not in observable_output
+    assert "traceback" not in observable_output.casefold()
+    assert "runtimeerror" not in observable_output.casefold()

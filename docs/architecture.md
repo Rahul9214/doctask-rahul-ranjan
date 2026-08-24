@@ -148,8 +148,8 @@ flowchart LR
   duplicate bytes for one logical source return the existing version.
 - `SourceVersion` and `SourceBlock` are immutable by application contract and API/service behavior.
   Database UPDATE/DELETE prevention triggers and restricted mutation roles are not implemented.
-- No Fact, Contradiction, Finding, Rule, ChangeSet, ReviewDecision, RegisterVersion, run, or
-  checkpoint business table was created.
+- Phase 02 itself created no Fact, Contradiction, Finding, ReviewDecision, publication, run, or
+  checkpoint business table; the later phase migrations listed above add those records.
 
 ### Ingestion/storage transaction
 
@@ -211,7 +211,7 @@ L2-normalized. PostgreSQL stores the vector and performs cosine-distance orderin
 optional format/block-type filters. Zero-token queries are rejected. This is deterministic lexical
 retrieval support for local tests, not a model gateway or semantic embedding claim.
 
-## Planned system shape
+## System shape
 
 Use one modular application codebase with a small number of process roles:
 
@@ -359,10 +359,8 @@ uniqueness, examination-run analysis-run/corpus composite FK, finding outcome/ev
 finding-to-fact and finding-to-contradiction composite FKs that reject cross-run and cross-corpus
 evidence, deterministic vectors, HNSW indexing, and metadata-filtered retrieval.
 
-Later planned responsibilities:
-
-- published register versions and item hashes; and
-- append-only change-attribution events.
+Added in later phases: published register versions and item hashes, plus append-only incremental
+change-attribution and publication events.
 
 Implemented in Phase 06: LangGraph checkpoint tables, durable workflow runs, operation ledger
 keys/results, and run events.
@@ -376,9 +374,10 @@ SHA-256 into generated version keys, uses a mounted named volume, and re-reads/r
 citation validation. Normalized blocks are stored in PostgreSQL rather than as duplicate filesystem
 artifacts. Object storage is not required for the acceptance target.
 
-### React review UI
+### React assurance UI
 
-Phase 05 implements a minimal review panel in the existing React/TypeScript shell:
+The React/TypeScript shell preserves the Phase 05 review workflow and adds submission-facing
+workflow, evidence, and final-register presentation:
 
 - open or reuse a review session from corpus and examination-run identifiers;
 - list review items with outcome, severity, reason, and grounded citations;
@@ -386,9 +385,14 @@ Phase 05 implements a minimal review panel in the existing React/TypeScript shel
 - submit explicit APPROVE, REJECT, and confirmed reviewer-authored EDIT, sending
   `reviewer_authored_acknowledged=true` for edits;
 - disable completion until every required item has a terminal decision;
-- loading, error, and pending-request states without stack traces.
+- loading, empty, error, and pending-request states without stack traces;
+- human-readable durable workflow status, current stage/revision, recent events, and usage/cost;
+- outcome labels plus non-color border/icon treatment, prominent exact quotes and provenance, and
+  side-by-side contradiction evidence; and
+- explicit publication state with unmistakably separated SYSTEM-GROUNDED ORIGINAL and
+  REVIEWER-AUTHORED EDIT content.
 
-Rich document editing, stage timelines, and observability dashboards remain later.
+Rich document editing and elaborate observability dashboards are intentionally not implemented.
 
 ### Simple watched inbox
 

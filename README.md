@@ -84,13 +84,17 @@ overrides; `.env` is Git-ignored.
 - `TEST_DATABASE_URL` (must name `project_assurance_test` and differ from `DATABASE_URL`)
 - `ALLOW_DESTRUCTIVE_TEST_DATABASE` must be `true` before integration cleanup
 
+**Release identity:** `APP_NAME`, `APP_VERSION`, and `CURRENT_PHASE` are supplied by Compose and
+documented for host-side processes.
+
 **Optional** local development: `MAX_UPLOAD_BYTES`, `READINESS_TIMEOUT_SECONDS`,
-`SOURCE_STORAGE_PATH`, `WATCH_INPUT_PATH`, `WATCH_POLL_SECONDS`, `WATCH_STABLE_POLLS`,
-`RULESET_PATH`.
+`WATCH_POLL_SECONDS`, `WATCH_STABLE_POLLS`, and `RULESET_PATH`. Host-side processes may also set
+`SOURCE_STORAGE_PATH` and `WATCH_INPUT_PATH`; Compose uses its mounted `/data/...` paths.
 
 **Live model optional:** default `MODEL_PROVIDER=deterministic` requires no key. Set
 `MODEL_PROVIDER=openai` only with `OPENAI_API_KEY` (do not commit it). Also `OPENAI_MODEL`,
-`OPENAI_BASE_URL`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES`.
+`OPENAI_BASE_URL`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES`. Compose forwards these optional
+values from the local environment.
 
 Compose `POSTGRES_PASSWORD` must match `[A-Za-z0-9_]+`. Default `local_only` satisfies the
 contract. Percent-encoding is not a workaround.
@@ -160,8 +164,11 @@ Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($run.review_session_id)/complete"
 ```
 
-The React shell at `/` has the review panel plus workflow status and a compact published-register
-panel. Use those instead of curl if you prefer a UI.
+The React shell at `/` presents durable workflow status, evidence-led item review, explicit resume
+and publication boundaries, and the final published register. Supplemental workflow telemetry is
+best-effort and cannot hide an authoritative workflow run. Use the UI instead of curl where it
+supports the operation. The evaluator-oriented `docs/manual-test-playbook.md` walks through the
+complete UI/API/MCP proof.
 
 ## Resume
 
@@ -355,7 +362,8 @@ No paid model API. No deployment workflow. No Kubernetes.
 ## Security posture
 
 - No real secrets required or committed. `.env` is ignored.
-- Readiness and MCP errors are controlled: no driver traceback, source dumps, or credentials.
+- Readiness, unexpected HTTP failures, and MCP errors have controlled responses; unexpected HTTP
+  server logs record only a safe category, not exception text, tracebacks, source dumps, or credentials.
 - Document text is untrusted data. It cannot alter policy, call tools, self-approve, or publish.
 - Publication requires a completed same-corpus review session.
 - MCP has no arbitrary shell/file execution tools.
@@ -376,7 +384,6 @@ This is not a penetration test or certification claim.
 - Deliverable-side register locators (`register_version_id` / `register_item_id`) are defined for
   later findings-about-registers; this delivery publishes source-grounded reviewed items and does
   not run a second Examine pass over the published register.
-- Independent verification of this Phase 10 working tree is not claimed until performed.
 
 ## Project documentation
 
@@ -384,4 +391,5 @@ This is not a penetration test or certification claim.
 - `PROGRESS.md` — chronological decisions and evidence
 - `docs/architecture.md` — implemented architecture
 - `docs/final-acceptance.md` — executable final-flow evidence
+- `docs/manual-test-playbook.md` — concise evaluator walkthrough from startup through cleanup
 - `docs/measurements/phase-09-local.json` — recorded local measurement sample
