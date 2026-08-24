@@ -375,7 +375,10 @@ describe("App", () => {
     expect(overview).toHaveAttribute("aria-current", "page");
     overview.focus();
     expect(overview).toHaveFocus();
-    expect(overview).toHaveAttribute("aria-describedby", "nav-tooltip-overview");
+    expect(overview).toHaveAttribute(
+      "aria-describedby",
+      "nav-tooltip-overview",
+    );
 
     await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
     expect(
