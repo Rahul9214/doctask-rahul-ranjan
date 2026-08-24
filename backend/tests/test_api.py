@@ -97,7 +97,8 @@ def test_version_is_truthful_about_phase_scope() -> None:
             "MCP remains a local-development stdio server over the same application "
             "services as HTTP. Generation never auto-approves or auto-publishes. "
             "MCP is trusted-client scope with corpus isolation and no production "
-            "authentication. Hosted cloud deployment is not implemented."
+            "authentication. A Railway-hosted demonstration deployment is available; "
+            "it is not an SLA-backed production service."
         ),
     }
 

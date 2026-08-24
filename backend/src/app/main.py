@@ -150,7 +150,8 @@ def create_app(
             "Phase 10 final delivery over grounded Understand, Examine, explicit human review, "
             "durable resume, focused incremental updates, MCP business operations, and "
             "approved-only register publication. MCP is a stdio adapter over the same "
-            "application services as HTTP. Hosted cloud deployment is not implemented."
+            "application services as HTTP. A Railway-hosted demonstration deployment "
+            "is available; it is not an SLA-backed production service."
         ),
         lifespan=lifespan,
     )

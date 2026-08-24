@@ -20,7 +20,7 @@ reuse unaffected artifacts with canonical unchanged-byte proof, and persist exec
 operation evidence. MCP is a stdio process role over the same `ApplicationServices` as FastAPI,
 including publication tools that call `PublicationService`.
 
-Hosted cloud deployment is not implemented. Local Compose is the supported runtime.
+A Railway-hosted demonstration deployment is available. Local Compose remains the supported reproducible local runtime; the Railway deployment is not an SLA-backed production service.
 
 ## Design goals
 
