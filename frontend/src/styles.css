@@ -293,8 +293,9 @@ code {
 
 .nav-tooltip {
   position: absolute;
-  left: calc(100% + 0.7rem);
-  z-index: 45;
+  top: 50%;
+  left: calc(100% + 0.5rem);
+  z-index: 60;
   display: none;
   padding: 0.35rem 0.55rem;
   border: 1px solid #29415f;
@@ -303,8 +304,10 @@ code {
   color: #fff;
   font-size: 0.72rem;
   font-weight: 650;
+  line-height: 1.2;
   white-space: nowrap;
   pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .sidebar-toggle {
@@ -340,7 +343,9 @@ code {
 
 .app-shell--collapsed .sidebar,
 .app-shell--collapsed .sidebar--fixed {
+  z-index: 40;
   width: 4.5rem;
+  overflow: visible;
 }
 
 .app-shell--collapsed .sidebar .sidebar__brand-name,
@@ -363,8 +368,9 @@ code {
   margin: 0 auto;
 }
 
-.app-shell--collapsed .nav-item:hover .nav-tooltip,
-.app-shell--collapsed .nav-item:focus-visible .nav-tooltip {
+.app-shell--collapsed .sidebar .nav-item:hover .nav-tooltip,
+.app-shell--collapsed .sidebar .nav-item:focus .nav-tooltip,
+.app-shell--collapsed .sidebar .nav-item:focus-visible .nav-tooltip {
   display: block;
 }
 
@@ -2470,6 +2476,10 @@ select:disabled {
 
   .mobile-drawer .nav-item-label {
     display: inline;
+  }
+
+  .nav-tooltip {
+    display: none !important;
   }
 
   .main-content {

@@ -289,6 +289,100 @@ describe("App", () => {
     expect(screen.getAllByText("Disabled").length).toBeGreaterThan(1);
   });
 
+  it("exposes collapsed icon-rail tooltips without duplicating expanded labels", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/corpora")) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        if (path.endsWith("/version")) {
+          return Promise.resolve(jsonResponse(version));
+        }
+        return Promise.resolve(
+          jsonResponse({
+            status: "ready",
+            checks: { database: { status: "ready" } },
+          }),
+        );
+      }),
+    );
+
+    render(<App />);
+    const navItems: Array<{ name: string; tooltipId: string; label: string }> =
+      [
+        {
+          name: "Overview",
+          tooltipId: "nav-tooltip-overview",
+          label: "Overview",
+        },
+        {
+          name: "Agent Run",
+          tooltipId: "nav-tooltip-agent-run",
+          label: "Agent Run",
+        },
+        {
+          name: "Human Review",
+          tooltipId: "nav-tooltip-human-review",
+          label: "Human Review",
+        },
+        {
+          name: "Register",
+          tooltipId: "nav-tooltip-register",
+          label: "Register",
+        },
+        { name: "System", tooltipId: "nav-tooltip-system", label: "System" },
+        {
+          name: "MCP machine interface",
+          tooltipId: "nav-tooltip-mcp",
+          label: "MCP",
+        },
+      ];
+
+    for (const item of navItems) {
+      const button = screen.getAllByRole("button", { name: item.name })[0];
+      expect(button).not.toHaveAttribute("aria-describedby");
+      expect(document.getElementById(item.tooltipId)).toHaveAttribute(
+        "role",
+        "tooltip",
+      );
+    }
+
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(document.querySelector(".app-shell")).toHaveClass(
+      "app-shell--collapsed",
+    );
+
+    for (const item of navItems) {
+      const button = screen.getAllByRole("button", { name: item.name })[0];
+      expect(button).toHaveAttribute("aria-describedby", item.tooltipId);
+      const tooltip = document.getElementById(item.tooltipId);
+      expect(tooltip).toHaveAttribute("role", "tooltip");
+      expect(tooltip).toHaveTextContent(item.label);
+      expect(
+        document.querySelector(
+          `.app-shell--collapsed .sidebar .nav-item-label`,
+        ),
+      ).toBeTruthy();
+      expect(button.querySelector(".nav-item-label")).toHaveTextContent(
+        item.label,
+      );
+    }
+
+    const overview = screen.getAllByRole("button", { name: "Overview" })[0];
+    expect(overview).toHaveAttribute("aria-current", "page");
+    overview.focus();
+    expect(overview).toHaveFocus();
+    expect(overview).toHaveAttribute("aria-describedby", "nav-tooltip-overview");
+
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(
+      screen.getAllByRole("button", { name: "Overview" })[0],
+    ).not.toHaveAttribute("aria-describedby");
+  });
+
   it("opens and closes the mobile navigation drawer", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(
@@ -325,6 +419,11 @@ describe("App", () => {
         hidden: true,
       }),
     ).toHaveAttribute("aria-current", "page");
+    expect(within(drawer as HTMLElement).getByText("Overview")).toBeVisible();
+    expect(
+      within(drawer as HTMLElement).getByText("Human Review"),
+    ).toBeVisible();
+    expect(within(drawer as HTMLElement).getByText("MCP")).toBeVisible();
     fireEvent.click(
       within(drawer as HTMLElement).getByRole("button", {
         name: "Agent Run",
