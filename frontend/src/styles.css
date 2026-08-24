@@ -59,7 +59,8 @@ body,
 
 html {
   min-width: 320px;
-  overflow-x: hidden;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--canvas);
 }
 
@@ -517,6 +518,7 @@ code {
   padding: clamp(1.5rem, 4vw, 3rem) 0 4rem;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .main-content:focus {

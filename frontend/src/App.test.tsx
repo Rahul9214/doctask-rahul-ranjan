@@ -676,4 +676,38 @@ describe("App", () => {
     );
     expect(register.getByLabelText("Review session")).toHaveValue("session-1");
   });
+
+  it("keeps Human Review scrolling inside the main workspace", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.endsWith("/version")) {
+          return Promise.resolve(jsonResponse(version));
+        }
+        if (path.endsWith("/ready")) {
+          return Promise.resolve(
+            jsonResponse({
+              status: "ready",
+              checks: { database: { status: "ready" } },
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ status: "alive" }));
+      }),
+    );
+
+    render(<App />);
+    await user.click(
+      screen.getAllByRole("button", { name: "Human Review" })[0],
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Human Review", level: 1 }),
+    ).toBeInTheDocument();
+
+    const workspace = document.getElementById("main-workspace");
+    expect(workspace).toHaveClass("main-content");
+    expect(workspace?.querySelector(".page--review")).toBeTruthy();
+  });
 });
