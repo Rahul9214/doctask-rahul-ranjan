@@ -1,48 +1,167 @@
 # Project Assurance Register
 
-Grounded software-project assurance over mixed documents: ingest an immutable corpus, Understand
-facts with exact citations, Examine a versioned ruleset, wait for explicit human review, resume a
-durable workflow, and **publish an approved-only register** only after that review is completed.
+Project Assurance Register is an evidence-led assurance application for mixed project documents. It builds a source-grounded understanding, evaluates configurable rules, pauses for explicit human decisions, and publishes a reviewed register only when a reviewer requests publication.
 
-Application version **1.0.0**. Current phase: **Phase 10 — Final Delivery**.
+[Live Demo](https://heroic-surprise-production-13c1.up.railway.app) · [Backend Health](https://doctask-rahul-ranjan-production.up.railway.app/health) · [Readiness](https://doctask-rahul-ranjan-production.up.railway.app/ready) · [Version](https://doctask-rahul-ranjan-production.up.railway.app/version)
 
-Hosted cloud deployment is not implemented. MCP is local-development / trusted-client stdio with
-corpus isolation and no production authentication. Generation never auto-approves or auto-publishes.
-Workflow status `completed` is not publication.
+Current application identity: **Project Assurance Register 1.0.0**.
 
-Historical phase logs live in `PROGRESS.md`. This file is the operational runbook.
+## Overview
+
+The application ingests PDF, DOCX, Markdown, and text project sources into an isolated corpus. It then:
+
+- builds an understanding from claims that retain exact source citations;
+- evaluates the understanding against a versioned, configurable assurance ruleset;
+- surfaces missing evidence as `UNKNOWN` instead of inventing support;
+- keeps contradictory evidence visible rather than silently reconciling it;
+- requires explicit approve, reject, or acknowledged reviewer-edit decisions for consequential findings;
+- resumes durable execution only after the review gate is complete; and
+- creates an authoritative register only through a separate publication action.
+
+This is not an autonomous approval system. Generation cannot approve its own findings, resume does not create decisions, workflow completion does not publish, and publication is never automatic.
+
+## Why this architecture
+
+The control boundary separates evidence gathering and rule evaluation from human authority and authoritative output.
+
+```mermaid
+flowchart LR
+    A[Project documents] --> B[Understand]
+    B --> C[Examine]
+    C --> D[Human Review<br/>approve / reject / edit]
+    D --> E[Finalize<br/>explicit resume]
+    E --> F[Explicit Publish<br/>reviewed register]
+```
+
+Human review is mandatory when required items exist. Resume continues a completed review; it never approves an item. Finalization marks the durable workflow complete, while publication remains an independent, explicit operation.
+
+## Core control properties
+
+- **Source-attributed evidence.** Supported facts retain source version, SHA-256, native locator, exact quote, and span. Citations are re-resolved against stored source bytes before consequential findings and publications are persisted.
+- **No-bluffing semantics.** Retrieval supplies context, not proof. Unsupported information remains `UNKNOWN` or insufficient evidence; a plausible but unrelated citation cannot make a claim supported.
+- **Contradiction visibility.** Conflicting grounded facts retain both source sides for examination and review.
+- **Explicit decisions.** Required `FAIL`, `WARNING`, and `UNKNOWN` items must be approved, rejected, or edited with reviewer-authored acknowledgement. Optional `PASS` items do not block completion.
+- **Durable gate and resume.** PostgreSQL-backed LangGraph checkpoints, workflow records, and an operation ledger preserve progress across resume and demonstrated process-kill recovery.
+- **Immutable completed review.** A completed review session rejects later decision changes.
+- **Approved/edited-only publication.** Approved and acknowledged reviewer-edited items are applied; rejected items are recorded as omitted and do not appear in the published item list.
+- **Separate publication authority.** A completed workflow can remain unpublished. Publishing is an explicit, corpus-scoped action that creates an immutable register version.
+- **Bounded machine operations.** MCP exposes the same assurance services through 20 typed operations, without arbitrary shell or file-execution tools.
+
+These are application control properties, not claims of certification, penetration testing, identity separation, or internet-facing access control.
+
+## Product workflow
+
+1. Create a corpus and ingest source documents as immutable source versions.
+2. **Understand** extracts relevant facts, validates citations, records missing evidence, and detects grounded contradictions.
+3. **Examine** selects applicable rules from the active ruleset and produces `PASS`, `FAIL`, `WARNING`, or `UNKNOWN` findings.
+4. The durable workflow opens a review session and stops at `waiting_for_review`.
+5. A reviewer approves, rejects, or edits required findings. Edits require acknowledgement that their text is reviewer-authored and not system-grounded.
+6. Completing the review makes its decisions immutable.
+7. An explicit resume continues the same workflow without creating or changing decisions.
+8. **Finalize** completes the workflow.
+9. A separate explicit publish action creates the current register version.
+
+The main records have distinct responsibilities:
+
+| Record | Meaning |
+| --- | --- |
+| Workflow run | Durable execution state across Understand, Examine, the human gate, resume, and Finalize |
+| Examination | Ruleset findings derived from a particular grounded analysis |
+| Review session | Item-level human decisions over one examination |
+| Published register | Immutable, explicitly published output containing applied decisions and provenance |
+
+## Application surfaces
+
+| Page | Purpose |
+| --- | --- |
+| Overview | Runtime state, corpora, source-document summary, and workflow entry point |
+| Agent Run | Start or inspect durable execution, stage history, review state, resume, timing, and cost |
+| Human Review | Inspect evidence and record explicit approve, reject, or reviewer-edit decisions |
+| Register | Publish an eligible completed review and inspect the current register |
+| System | Health, version, ruleset, MCP summary, and incremental-update evidence |
+| MCP | The bounded stdio machine-operation surface and its operation groups |
+
+## Live deployment
+
+Railway hosts the current demonstration deployment:
+
+| Surface | URL |
+| --- | --- |
+| Public application | <https://heroic-surprise-production-13c1.up.railway.app> |
+| Backend | <https://doctask-rahul-ranjan-production.up.railway.app> |
+| Liveness | <https://doctask-rahul-ranjan-production.up.railway.app/health> |
+| Readiness | <https://doctask-rahul-ranjan-production.up.railway.app/ready> |
+| Version | <https://doctask-rahul-ranjan-production.up.railway.app/version> |
+
+The demonstrated topology uses a public frontend, a public FastAPI backend, and Railway PostgreSQL. The current readiness report verifies PostgreSQL and pgvector. Two synthetic demonstration corpora are seeded with eight source documents.
+
+The Aurora Control Hub production acceptance run completed Understand and Examine, stopped at the human gate, resumed only after explicit review, finalized without publishing, and was then explicitly published. The resulting register applied approved and reviewer-edited items, omitted rejected items, and retained the completed review as immutable.
+
+This is a demonstration deployment, not an SLA-backed service or a claim of production authentication, high availability, autoscaling, or multi-region operation.
 
 ## Architecture
 
-```text
-source bytes
-  → immutable SourceVersion (SHA-256, native locators)
-  → Understand (grounded facts / UNKNOWN / contradictions)
-  → Examine (versioned ruleset software-project-assurance.v1)
-  → WAITING_FOR_REVIEW (explicit approve / reject / edit)
-  → durable resume (PostgreSQL LangGraph checkpoints + operation ledger)
-  → incremental watched updates (focused reprocess, canonical reuse proof)
-  → MCP and React as adapters over the same ApplicationServices
-  → explicit POST publish → immutable published register
+The repository is one modular application with a small number of process roles, not a microservice fleet.
+
+| Component | Responsibility |
+| --- | --- |
+| React + TypeScript frontend | Reviewer-facing workflow, review, register, system, and MCP views |
+| Nginx | Serves the Vite build and proxies frontend `/api/*` requests |
+| FastAPI | Health/readiness plus corpus, evidence, workflow, review, incremental, usage, and publication APIs |
+| Application services | Shared business boundary used by both HTTP and MCP |
+| LangGraph | Understand/Examine graphs and the outer durable workflow with a human interrupt |
+| PostgreSQL + pgvector | Business records, checkpoints, operation evidence, and corpus-scoped retrieval |
+| Mounted source store | Original source bytes used for provenance revalidation |
+| MCP stdio server | Trusted-client typed adapter over the same application services |
+| Alembic | Database schema migrations applied when the backend container starts |
+
+**Local Compose:** Nginx/React frontend, FastAPI backend, and PostgreSQL/pgvector, with named volumes for the database, source files, and watcher inbox.
+
+**Railway:** public Nginx/React frontend → Railway-internal backend route, alongside the public FastAPI backend → Railway PostgreSQL.
+
+pgvector is used for corpus-scoped retrieval. A retrieval result is never treated as evidence until the exact citation and assertion-to-evidence checks pass.
+
+See [docs/architecture.md](docs/architecture.md) for the data model, provenance boundary, durable workflow, incremental processing, and failure semantics.
+
+## Technology stack
+
+| Layer | Implemented technology |
+| --- | --- |
+| Frontend | React 19, TypeScript 6, Vite 8, Vitest, Testing Library |
+| Web serving | Nginx 1.29 |
+| Backend | Python 3.13, FastAPI 0.141, Pydantic 2.13, Uvicorn 0.52 |
+| Workflow | LangGraph 1.2 with PostgreSQL checkpoints |
+| Data | PostgreSQL 17, pgvector 0.8.1 image, SQLAlchemy 2.0, asyncpg, Alembic 1.19 |
+| Document handling | pypdf, python-docx, Markdown/text deterministic parsing |
+| Machine interface | MCP 2.0 over standard input/output |
+| Packaging and delivery | uv, npm, Docker Compose, Railway |
+
+Exact pinned backend versions are in [backend/pyproject.toml](backend/pyproject.toml); frontend versions and scripts are in [frontend/package.json](frontend/package.json) and its lockfile.
+
+## MCP
+
+The MCP server uses **standard input/output (stdio)** and is intended for local or otherwise trusted clients. It is not a public hosted MCP endpoint. Its 20 operations call the same corpus-scoped application services as HTTP:
+
+| Category | Operations |
+| --- | ---: |
+| Corpus inspection | 3 |
+| Workflow and grounded analysis | 5 |
+| Human review | 6 |
+| Publication | 3 |
+| Incremental processing | 3 |
+
+The surface can start and inspect workflows; inspect understanding, examination, review, registers, revisions, and incremental evidence; record explicit review decisions; complete review; resume; and explicitly publish. `complete_review` does not publish, `resume_workflow` does not approve, and no operation provides arbitrary shell or file execution.
+
+Run the server or verify its registered operations from `backend/`:
+
+```powershell
+uv run python -m app.mcp_server
+uv run python -m app.mcp_probe
 ```
 
-Evidence boundary: supported claims require a Phase 02 citation that still resolves against stored
-bytes **and** a Phase 03 assertion-to-evidence check. Reviewer-authored edits are stored and
-published as REVIEWER-AUTHORED overlays; they are never presented as system-grounded quotes.
-Rejected items are omitted from the published item list. Pending optional PASS findings are omitted
-and are not treated as approved.
+## Local development
 
-Local runtime is Docker Compose: PostgreSQL 17 + pgvector, FastAPI backend (Alembic on start),
-Nginx-served React frontend.
-
-## Prerequisites
-
-- Docker Desktop with Compose
-- no model, LLM, SuperDocs, or other API key for the default path
-
-Optional host-side verification: uv **0.11.26**, CPython **3.13.14**, Node.js **22.20.0**.
-
-## One-command startup
+Docker Desktop with Compose is the shortest reproducible path. The default deterministic model adapter requires no model API key.
 
 From the repository root:
 
@@ -50,234 +169,52 @@ From the repository root:
 docker compose up --build
 ```
 
-Compose creates persistent PostgreSQL, source-file, and watch-inbox volumes, waits for database
-health, applies Alembic to head `20260822_0008`, starts the backend, and serves the built frontend
-through Nginx.
+Compose supplies local environment defaults, so copying `.env.example` is not required. Create `.env` only when overriding those defaults.
 
-Open:
+| Local surface | URL |
+| --- | --- |
+| Frontend | <http://localhost:5173> |
+| Backend OpenAPI | <http://localhost:8000/docs> |
+| Liveness | <http://localhost:8000/health> |
+| Readiness | <http://localhost:8000/ready> |
+| Version | <http://localhost:8000/version> |
 
-- frontend: <http://localhost:5173>
-- backend OpenAPI: <http://localhost:8000/docs>
-- liveness: <http://localhost:8000/health>
-- readiness: <http://localhost:8000/ready>
-- version/phase: <http://localhost:8000/version>
+The backend URLs above address the local service directly. The committed Nginx upstream currently targets Railway, so the built frontend's `/api/*` proxy is not an all-local Compose route; restoring a Compose-specific upstream is a configuration follow-up outside this documentation-only pass.
 
-Stop:
+Verify the running stack:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+Invoke-RestMethod http://localhost:8000/ready
+Invoke-RestMethod http://localhost:8000/version
+docker compose ps
+```
+
+Stop the stack without deleting its named volumes:
 
 ```powershell
 docker compose down
 ```
 
-`docker compose down` preserves volumes. Use `docker compose down --volumes` only when you
-intentionally want to delete local database and uploaded source data.
+The [manual test playbook](docs/manual-test-playbook.md) covers ingestion, the full human gate, resume, explicit publication, MCP, incremental processing, adversarial cases, and restart persistence.
 
-## Environment variables
+## Configuration
 
-`.env.example` documents settings. Compose runs without copying it. Copy to `.env` only for
-overrides; `.env` is Git-ignored.
+[`.env.example`](.env.example) documents supported settings in these groups:
 
-**Required** for Compose / host databases:
+- PostgreSQL credentials, application/test database URLs, and local ports;
+- application identity and version text;
+- upload limits, readiness timeout, source storage, and watcher polling;
+- deterministic or OpenAI-compatible model selection; and
+- optional ruleset override.
 
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`
-- `BACKEND_PORT`, `FRONTEND_PORT`
-- `DATABASE_URL` for host-side backend commands
-- `TEST_DATABASE_URL` (must name `project_assurance_test` and differ from `DATABASE_URL`)
-- `ALLOW_DESTRUCTIVE_TEST_DATABASE` must be `true` before integration cleanup
+Do not commit `.env` or API keys. `TEST_DATABASE_URL` is only for the disposable integration-test database: it must identify `project_assurance_test`, must differ from `DATABASE_URL`, and destructive cleanup also requires `ALLOW_DESTRUCTIVE_TEST_DATABASE=true`. Never point those safeguards at the application database.
 
-**Release identity:** `APP_NAME`, `APP_VERSION`, and `CURRENT_PHASE` are supplied by Compose and
-documented for host-side processes.
+## Testing and verification
 
-**Optional** local development: `MAX_UPLOAD_BYTES`, `READINESS_TIMEOUT_SECONDS`,
-`WATCH_POLL_SECONDS`, `WATCH_STABLE_POLLS`, and `RULESET_PATH`. Host-side processes may also set
-`SOURCE_STORAGE_PATH` and `WATCH_INPUT_PATH`; Compose uses its mounted `/data/...` paths.
+### Backend
 
-**Live model optional:** default `MODEL_PROVIDER=deterministic` requires no key. Set
-`MODEL_PROVIDER=openai` only with `OPENAI_API_KEY` (do not commit it). Also `OPENAI_MODEL`,
-`OPENAI_BASE_URL`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_RETRIES`. Compose forwards these optional
-values from the local environment.
-
-Compose `POSTGRES_PASSWORD` must match `[A-Za-z0-9_]+`. Default `local_only` satisfies the
-contract. Percent-encoding is not a workaround.
-
-## Ingest a demo corpus
-
-With the stack running, from the repository root:
-
-```powershell
-$corpus = Invoke-RestMethod -Method Post -Uri http://localhost:8000/corpora `
-  -ContentType "application/json" `
-  -Body (@{
-    name = "Aurora Control Hub"
-    domain = "software-project-assurance"
-    declared_formats = @("pdf", "docx", "markdown", "txt")
-  } | ConvertTo-Json)
-
-curl.exe --fail -X POST `
-  -F "logical_name=Decision Log" `
-  -F "declared_format=txt" `
-  -F "file=@backend/fixtures/corpora/aurora-control-hub/decision-log.txt;type=text/plain" `
-  "http://localhost:8000/corpora/$($corpus.id)/sources"
-```
-
-Repeat for the other Aurora files in `backend/fixtures/corpora/aurora-control-hub/` using the
-logical names in `manifest.json` (`Project Charter` pdf, `Weekly Status Report` docx,
-`Risk Register` markdown). Harbor uses `backend/fixtures/corpora/harbor-ledger-modernization/`
-with the same APIs and no corpus-name special cases.
-
-A full Aurora+Harbor HTTP path against a live stack:
-
-```powershell
-uv run --directory backend python scripts/final_runtime_acceptance.py http://localhost:8000
-```
-
-## Run the workflow
-
-```powershell
-$run = Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/workflow-runs"
-$run.status   # waiting_for_review after Understand + Examine
-$run.review_session_id
-```
-
-Understand and Examine also have direct APIs if you are not using the outer workflow:
-
-- `POST /corpora/{corpus_id}/analysis-runs`
-- `POST /corpora/{corpus_id}/analysis-runs/{analysis_run_id}/examination-runs`
-
-## Review
-
-FAIL, WARNING, and UNKNOWN items require an explicit decision. PASS items are optional and do not
-block completion. Generation never auto-approves.
-
-```powershell
-Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($run.review_session_id)/items"
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($run.review_session_id)/items/<item-id>/decisions" `
-  -ContentType "application/json" `
-  -Body (@{ action = "approve"; decision_source = "api" } | ConvertTo-Json)
-
-# reject:  @{ action = "reject"; decision_source = "api" }
-# edit:    @{ action = "edit"; edited_content = "..."; reviewer_authored_acknowledged = $true; decision_source = "api" }
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($run.review_session_id)/complete"
-```
-
-The React shell at `/` presents durable workflow status, evidence-led item review, explicit resume
-and publication boundaries, and the final published register. Supplemental workflow telemetry is
-best-effort and cannot hide an authoritative workflow run. Use the UI instead of curl where it
-supports the operation. The evaluator-oriented `docs/manual-test-playbook.md` walks through the
-complete UI/API/MCP proof.
-
-## Resume
-
-After required decisions and `complete`, resume the waiting workflow:
-
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/workflow-runs/$($run.id)/resume"
-```
-
-Resume of `waiting_for_review` does not auto-approve. A completed workflow is still unpublished
-until the explicit publish call below.
-
-Process-kill recovery is proven by `tests/test_process_kill_resume.py`.
-
-## Publish / finalize the register
-
-```powershell
-# Must 404 until an explicit publish:
-Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/register"
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/review-sessions/$($run.review_session_id)/publish" `
-  -ContentType "application/json" `
-  -Body (@{ actor = "reviewer"; publication_source = "api" } | ConvertTo-Json)
-
-Invoke-RestMethod "http://localhost:8000/corpora/$($corpus.id)/register"
-```
-
-Idempotent republish of the same completed session returns the same publication (HTTP 200).
-Wrong-corpus or pending-review publish is rejected. Older publications remain; one row is
-`is_current`.
-
-Before creating an authoritative row, `PublicationService` reloads each applied finding and
-reuses the Examine evidence boundary: every referenced SUPPORTED fact passes Phase 02 exact
-citation resolution against freshly hashed/re-parsed immutable bytes, then Phase 03 assertion
-grounding. Contradictions revalidate both fact sides. Any mismatch fails closed as
-`publication_evidence_validation_failed`; no current publication is advanced.
-
-## Inspect provenance and usage
-
-- Facts/findings: `GET .../understanding`, `GET .../findings`, review item citations
-- Published items: `content_origin` is `system_grounded` or `mixed`; `system_grounded` /
-  `reviewer_authored` flags; `exact_quote` + `native_locator` + `source_logical_name`
-- Stage timing / tokens / honest cost: `GET /corpora/{corpus_id}/workflow-runs/{run_id}/usage`.
-  `total_duration_ms` sums only non-overlapping outer workflow events
-  (`duration_basis=outer_workflow_events`); Understand and Examine timings remain a separate
-  nested breakdown and are not added into that total.
-
-Default deterministic adapter: `estimated_cost_usd` is 0 with `cost_basis=zero_deterministic` and
-an explicit pricing-basis sentence. Live-path cost is `unavailable` unless a pricing snapshot is
-configured.
-
-## MCP
-
-```powershell
-python -m app.mcp_server
-docker compose exec backend python -m app.mcp_probe
-```
-
-Typed tools (20), all delegated to the same services as HTTP:
-
-- inspect: `list_corpora`, `get_corpus`, `list_sources`, `get_workflow_status`, `get_understanding`,
-  `get_examination`, `open_review`, `list_review_items`, `get_current_revision`,
-  `get_incremental_evidence`, `get_current_register`, `get_register`
-- mutate: `start_workflow`, `resume_workflow`, `approve_review_item`, `reject_review_item`,
-  `edit_review_item`, `complete_review`, `publish_register`, `start_incremental_run`
-
-`complete_review` does not publish. `publish_register` is a separate mutation (`actor="mcp"`,
-`publication_source="api"`). No shell or arbitrary file execution tools exist.
-
-## Incremental watcher
-
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/revisions" `
-  -ContentType "application/json" `
-  -Body (@{
-    analysis_run_id = $analysis.id
-    examination_run_id = $exam.id
-    review_session_id = $review.id
-  } | ConvertTo-Json)
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8000/corpora/$($corpus.id)/incremental-runs" `
-  -ContentType "application/json" `
-  -Body (@{ baseline_revision_id = $baseline.id } | ConvertTo-Json)
-
-Invoke-RestMethod -Method Post http://localhost:8000/watcher/poll
-```
-
-Inbox layout: `{WATCH_INPUT_PATH}/{corpus_id}/{logical_name}.{ext}`. A file is eligible only after
-`WATCH_STABLE_POLLS` consecutive polls with the same SHA-256 and size.
-
-## Ruleset configuration
-
-`ApplicationServices` resolves `Settings.ruleset_path` during service construction and injects
-that loaded ruleset into `ExamineService` / `ExamineWorkflow`; no import-time environment lookup
-selects the active ruleset. Workflow metadata and incremental impact/re-evaluation use that same
-injected ruleset instance, avoiding fallback to packaged module globals. The default is
-`backend/src/app/rulesets/software-project-assurance.v1.json`. Changing supported outcome maps in
-that JSON (or a valid `RULESET_PATH`) changes real Examine behavior without rewriting evaluator
-Python. In Compose, an override path must be a path visible inside the backend container.
-Executable proof:
-`tests/test_ruleset.py::test_ruleset_path_changes_real_application_examine_behavior`.
-
-## Tests
-
-Backend, from `backend/`, with PostgreSQL reachable:
+With PostgreSQL/pgvector reachable, set the application and disposable test URLs as shown in `.env.example`, then run from `backend/`:
 
 ```powershell
 $env:DATABASE_URL = "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
@@ -286,9 +223,10 @@ $env:ALLOW_DESTRUCTIVE_TEST_DATABASE = "true"
 uv sync --frozen --all-groups
 uv run python scripts/ensure_test_database.py
 uv run alembic upgrade head
+$applicationDatabaseUrl = $env:DATABASE_URL
 $env:DATABASE_URL = $env:TEST_DATABASE_URL
 uv run alembic upgrade head
-$env:DATABASE_URL = "postgresql+asyncpg://project_assurance:local_only@localhost:5432/project_assurance"
+$env:DATABASE_URL = $applicationDatabaseUrl
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
@@ -296,7 +234,11 @@ uv run pytest --cov=app --cov-report=term-missing
 uv build
 ```
 
-Frontend, from `frontend/`:
+The current recorded Task-1 acceptance result is **249 collected, 249 passed, 0 failed, 91.44% coverage**, with `uv build` passing. This is the latest recorded local verification, not a guarantee for later commits. See [docs/final-acceptance.md](docs/final-acceptance.md) for the exact environment and executable acceptance evidence.
+
+### Frontend
+
+From `frontend/`:
 
 ```powershell
 npm ci
@@ -307,89 +249,48 @@ npm test
 npm run build
 ```
 
-Coverage fail-under is 90%. No paid model API is required.
+The final Task-1 workspace-scroll verification recorded **52 frontend tests passed**.
 
-## API surface (compact)
+CI runs the same backend and frontend quality gates, including the process-kill, MCP stdio, publication, migration, ruleset, secret-pattern, and final-acceptance suites.
 
-Foundation: `GET /health`, `GET /ready`, `GET /version`.
+## Demonstration corpora
 
-Corpus/source: `POST/GET /corpora`, sources, versions, blocks, `POST .../citations/validate`,
-`POST .../search`.
+- **Aurora Control Hub** exercises grounded agreement, contradictory milestone evidence, mixed human decisions, resume, and publication.
+- **Harbor Ledger Modernization** provides a second isolated corpus and demonstrates insufficient-evidence behavior without corpus-name-specific logic.
 
-Understand / Examine / review / workflow / incremental as in prior phases, plus:
+Both corpora and all eight fixture documents are synthetic demonstration data, not customer or real-project data. Fixtures live under [`backend/fixtures/corpora`](backend/fixtures/corpora).
 
-- `POST /corpora/{corpus_id}/review-sessions/{review_session_id}/publish`
-- `GET /corpora/{corpus_id}/register`
-- `GET /corpora/{corpus_id}/register/{publication_id}`
-- `GET /corpora/{corpus_id}/workflow-runs/{run_id}/usage`
+## Repository structure
 
-Every business operation is corpus-scoped. Cross-corpus lookups return not found without traceback.
-
-## Runtime and dependency baseline
-
-- Python: **CPython 3.13.14** (`backend/.python-version`), uv **0.11.26**
-- Node.js: **22.20.0**, npm **11.12.1** (verification version)
-- PostgreSQL **17** / pgvector **0.8.1** (`pgvector/pgvector:0.8.1-pg17-bookworm`)
-- FastAPI 0.141.1, SQLAlchemy 2.0.52, Alembic 1.19.1, LangGraph 1.2.11, MCP 2.0.0
-- React 19.2.8, Vite 8.2.1, TypeScript 6.0.3 — see `frontend/package-lock.json`
-
-## Smoke checks
-
-```powershell
-Invoke-RestMethod http://localhost:8000/health
-Invoke-RestMethod http://localhost:8000/ready
-Invoke-RestMethod http://localhost:8000/version
-Invoke-WebRequest -UseBasicParsing http://localhost:5173/
-Invoke-WebRequest -UseBasicParsing http://localhost:5173/api/ready
-docker compose exec backend alembic current
-docker compose exec backend python -m app.mcp_probe
-docker compose ps
+```text
+backend/                 FastAPI application, workflows, MCP server, migrations, tests, fixtures
+frontend/                React/TypeScript application, Nginx configuration, frontend tests
+docs/                    Architecture, final acceptance evidence, and manual test playbook
+compose.yaml             Local PostgreSQL/backend/frontend topology
+.env.example             Documented local and test configuration
+README.md                Reviewer-facing project entry point
 ```
 
-`/version` reports `1.0.0` and `Phase 10 — Final Delivery`. Alembic current is `20260822_0008`.
+## Limitations and scope
 
-## CI
+- Internet-facing authentication, authorization, RBAC, and proposer/reviewer identity separation are not implemented.
+- MCP is a trusted-client stdio interface, not a hosted or authenticated network service.
+- The demonstrated deployment uses the deterministic model adapter by default. It has intentionally narrow extraction coverage and is not general-purpose model reasoning.
+- Deterministic runs report zero provider cost. Live-provider cost remains unavailable unless a pricing basis is configured.
+- Supported ingestion is PDF, DOCX, Markdown, and text. PDF processing requires extractable text; OCR, handwriting, spreadsheets, and arbitrary binary formats are out of scope.
+- Parsers run in process without a separate sandbox or parser timeout.
+- Original source bytes must remain available in the configured persistent source store for later provenance validation. A crash after file promotion but before database commit can leave an orphaned stored object.
+- Incremental ingestion uses stable-file polling rather than filesystem events or a queue. Some failed pre-finalization incremental artifacts may require later reconciliation.
+- The seeded corpora are synthetic fixtures, and the Railway instance is a demonstration service without an SLA or stated availability guarantees.
 
-`.github/workflows/ci.yml` on pull requests and pushes to `main`:
+## Documentation
 
-- Backend: frozen uv sync, test-database bootstrap, Alembic head, 0008↔0007 schema round-trip,
-  Ruff, mypy, pytest coverage, secret-pattern regression, process-kill, MCP stdio E2E,
-  publication/final-acceptance E2E, `uv build`
-- Frontend: `npm ci`, format, lint, typecheck, tests, build
+- [Architecture](docs/architecture.md) — components, data model, trust boundary, durability, and incremental design
+- [Manual test playbook](docs/manual-test-playbook.md) — evaluator walkthrough from startup through controlled cleanup
+- [Final acceptance](docs/final-acceptance.md) — recorded executable evidence and test results
+- [Task contract](TASK.md) — original implementation assignment
+- [Progress record](PROGRESS.md) — chronological implementation and verification history
 
-No paid model API. No deployment workflow. No Kubernetes.
+## Status
 
-## Security posture
-
-- No real secrets required or committed. `.env` is ignored.
-- Readiness, unexpected HTTP failures, and MCP errors have controlled responses; unexpected HTTP
-  server logs record only a safe category, not exception text, tracebacks, source dumps, or credentials.
-- Document text is untrusted data. It cannot alter policy, call tools, self-approve, or publish.
-- Publication requires a completed same-corpus review session.
-- MCP has no arbitrary shell/file execution tools.
-
-This is not a penetration test or certification claim.
-
-## Known limitations
-
-- PDF is extractable text only; no OCR, handwriting, or scanned-image interpretation.
-- Spreadsheets and arbitrary binary formats are out of scope.
-- No internet-facing authentication, RBAC, or hosted cloud deployment.
-- Compose images run as the image default user because named volumes are written at runtime.
-- Deterministic adapter is keyless and domain-narrow; it is not general LLM reasoning.
-- Live-path estimated cost is unavailable without a pricing snapshot.
-- Contradiction detection is deterministic over supported facts sharing category and subject key.
-- Incremental watcher is stable-file polling, not inotify/Kafka.
-- A crash after file promotion but before database commit can leave an orphan object.
-- Deliverable-side register locators (`register_version_id` / `register_item_id`) are defined for
-  later findings-about-registers; this delivery publishes source-grounded reviewed items and does
-  not run a second Examine pass over the published register.
-
-## Project documentation
-
-- `TASK.md` — assignment contract
-- `PROGRESS.md` — chronological decisions and evidence
-- `docs/architecture.md` — implemented architecture
-- `docs/final-acceptance.md` — executable final-flow evidence
-- `docs/manual-test-playbook.md` — concise evaluator walkthrough from startup through cleanup
-- `docs/measurements/phase-09-local.json` — recorded local measurement sample
+Task-1 implementation and the deployed acceptance flow are complete. The Railway demonstration exercises the controlled workflow through explicit human review, durable resume, finalization, and separate explicit publication.
