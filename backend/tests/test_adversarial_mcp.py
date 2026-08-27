@@ -2,7 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from helpers import ingest_corpus, make_workflow
+from helpers import ingest_corpus, ingest_workflow_corpus, make_workflow
 from mcp_helpers import call_err, call_ok, in_memory_mcp
 
 from app.mcp_server import BUSINESS_TOOL_NAMES
@@ -29,7 +29,7 @@ async def test_mcp_hostile_inputs_are_controlled_application_errors(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(aurora.id)

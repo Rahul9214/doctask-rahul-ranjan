@@ -8,7 +8,7 @@ import pytest
 from alembic.config import Config
 from helpers import (
     fixture_upload,
-    ingest_corpus,
+    ingest_workflow_corpus,
     make_workflow,
     prepare_incremental_corpus,
 )
@@ -87,7 +87,7 @@ async def test_populated_0007_downgrade_preserves_workflow_owned_ledger_rows(
     tmp_path: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    workflow_corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    workflow_corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     workflow_run = await workflow.create_run(workflow_corpus.id)
     assert workflow_run.status == "waiting_for_review"

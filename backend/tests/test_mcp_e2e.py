@@ -2,7 +2,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from helpers import ingest_corpus
+from helpers import ingest_corpus, ingest_workflow_corpus
 from mcp_helpers import (
     ApplicationErrorCall,
     call_err,
@@ -31,7 +31,7 @@ async def test_mcp_stdio_aurora_machine_review_flow(
     corpus_fixtures: Path,
 ) -> None:
     phase02, storage = phase02_service
-    await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     async with stdio_mcp(storage) as client:
         listed = await client.list_tools()
         names = {tool.name for tool in listed.tools}
@@ -226,7 +226,7 @@ async def test_mcp_stdio_harbor_same_tools_and_cross_corpus_denial(
 ) -> None:
     phase02, storage = phase02_service
     aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
-    await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
+    await ingest_workflow_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     async with stdio_mcp(storage) as client:
         listed = await client.list_tools()
         names = {tool.name for tool in listed.tools}

@@ -3,7 +3,12 @@ from uuid import UUID
 
 import httpx
 import pytest
-from helpers import fixture_upload, ingest_corpus, prepare_incremental_corpus
+from helpers import (
+    fixture_upload,
+    ingest_corpus,
+    ingest_workflow_corpus,
+    prepare_incremental_corpus,
+)
 from mcp_helpers import call_err, call_ok, in_memory_mcp
 
 from app.main import create_app
@@ -17,7 +22,7 @@ async def test_mcp_and_http_share_review_workflow_and_incremental_semantics(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     async with in_memory_mcp(phase02) as (mcp_client, services):
         application = create_app(

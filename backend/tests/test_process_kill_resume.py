@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from helpers import ingest_corpus
+from helpers import ingest_workflow_corpus
 from sqlalchemy import select, text
 
 from app.models import DurableOperation, ReviewDecision, WorkflowRun, WorkflowRunEvent
@@ -30,7 +30,7 @@ async def test_real_process_kill_then_new_process_resumes_same_run(
     tmp_path: Path,
 ) -> None:
     phase02, storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     barrier_path = tmp_path / "understand-barrier.json"
     env = os.environ.copy()
     env["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]

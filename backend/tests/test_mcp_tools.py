@@ -2,7 +2,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from helpers import fixture_upload, ingest_corpus, prepare_incremental_corpus
+from helpers import (
+    fixture_upload,
+    ingest_corpus,
+    ingest_workflow_corpus,
+    prepare_incremental_corpus,
+)
 from mcp_helpers import call_err, call_ok, in_memory_mcp, mappings
 
 from app.mcp_server import BUSINESS_TOOL_NAMES
@@ -31,7 +36,7 @@ async def test_mcp_tool_discovery_schemas_and_business_operations(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     async with in_memory_mcp(phase02) as (client, _services):
         listed = await client.list_tools()

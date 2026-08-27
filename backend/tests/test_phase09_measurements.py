@@ -11,6 +11,7 @@ import pytest
 from helpers import (
     CountingModelAdapter,
     complete_required_review,
+    ensure_current_revision,
     ingest_text,
     make_incremental,
     make_workflow,
@@ -124,6 +125,7 @@ async def test_phase09_local_measurements_are_deterministic_and_zero_cost(
         "Overall status is GREEN.\n\nProduction readiness baseline at 2026-11-14",
     )
     workflow = make_workflow(phase02, adapter)
+    await ensure_current_revision(phase02, corpus.id)
     started = time.perf_counter()
     run = await workflow.create_run(corpus.id)
     baseline_seconds = time.perf_counter() - started
@@ -141,12 +143,6 @@ async def test_phase09_local_measurements_are_deterministic_and_zero_cost(
     assert resumed.status == "completed"
 
     incremental = make_incremental(phase02, adapter, review=review)
-    await incremental.create_baseline_revision(
-        corpus.id,
-        analysis_run_id=run.analysis_run_id,
-        examination_run_id=run.examination_run_id,
-        review_session_id=run.review_session_id,
-    )
     await ingest_text(
         phase02,
         corpus.id,

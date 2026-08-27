@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from helpers import (
     complete_required_review,
+    ensure_current_revision,
     ingest_corpus,
     make_incremental,
     make_publication,
@@ -181,6 +182,7 @@ async def test_publication_database_rejects_unrelated_same_corpus_workflow(
 ) -> None:
     phase02, _storage = phase02_service
     corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    await ensure_current_revision(phase02, corpus.id)
     publication = make_publication(phase02)
     analysis = await publication.review.examine.understand.create_run(corpus.id)
     examination = await publication.review.examine.create_run(corpus.id, analysis.id)

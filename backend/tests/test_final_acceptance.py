@@ -3,7 +3,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from helpers import ingest_corpus, make_publication, make_workflow
+from helpers import ingest_workflow_corpus, make_publication, make_workflow
 
 from app.main import create_app
 from app.publication_service import PublicationService
@@ -114,8 +114,8 @@ async def test_final_aurora_and_harbor_acceptance_with_isolation(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
-    harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    harbor = await ingest_workflow_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     workflow = make_workflow(phase02)
     publication = make_publication(phase02, review=workflow.review)
     application = _client_app(phase02, workflow, publication)

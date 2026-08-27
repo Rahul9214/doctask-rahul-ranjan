@@ -3,7 +3,12 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from helpers import complete_required_review, ingest_corpus, make_workflow
+from helpers import (
+    complete_required_review,
+    ingest_corpus,
+    ingest_workflow_corpus,
+    make_workflow,
+)
 
 from app.main import create_app
 from app.services import Phase02Service
@@ -16,7 +21,7 @@ async def test_workflow_api_start_inspect_resume_and_isolation(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     workflow = make_workflow(phase02)
     application = create_app(

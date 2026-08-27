@@ -18,7 +18,7 @@ from app.db import SessionFactory
 from app.errors import NotFoundError, Phase02Error, ValidationError
 from app.examine_service import ExamineService
 from app.model_gateway import PROMPT_CONFIG_VERSION, ModelAdapter, create_model_adapter
-from app.models import SourceVersion, WorkflowRun, WorkflowRunEvent
+from app.models import CorpusRevision, SourceVersion, WorkflowRun, WorkflowRunEvent
 from app.operation_ledger import OperationLedger
 from app.review_service import ReviewService
 from app.schemas import RunUsageResponse, StageUsage
@@ -67,6 +67,7 @@ class WorkflowService:
 
     async def _create_pending_run(self, corpus_id: UUID) -> WorkflowRun:
         await self.phase02.get_corpus(corpus_id)
+        await self._require_current_revision(corpus_id)
         fingerprint = await self._source_fingerprint(corpus_id)
         run_id = uuid4()
         run = WorkflowRun(
@@ -379,6 +380,18 @@ class WorkflowService:
             await session.refresh(run)
             return run
 
+    async def _require_current_revision(self, corpus_id: UUID) -> CorpusRevision:
+        async with self.session_factory() as session:
+            revision = await session.scalar(
+                select(CorpusRevision).where(
+                    CorpusRevision.corpus_id == corpus_id,
+                    CorpusRevision.is_current.is_(True),
+                )
+            )
+        if revision is None:
+            raise corpus_revision_required()
+        return revision
+
     async def _source_fingerprint(self, corpus_id: UUID) -> str:
         async with self.session_factory() as session:
             versions = list(
@@ -434,6 +447,15 @@ def _canonical_graph_input(run: WorkflowRun) -> WorkflowState:
         "current_stage": "pending",
         "status": "running",
     }
+
+
+def corpus_revision_required() -> ValidationError:
+    return ValidationError(
+        "corpus_revision_required",
+        "A corpus cannot start a workflow until it has a current durable revision.",
+        "Bootstrap or create the initial durable revision from ingested sources, "
+        "then start the workflow.",
+    )
 
 
 def _run_not_found() -> NotFoundError:

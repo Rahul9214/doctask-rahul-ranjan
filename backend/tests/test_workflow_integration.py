@@ -9,6 +9,7 @@ from helpers import (
     CountingModelAdapter,
     complete_required_review,
     ingest_corpus,
+    ingest_workflow_corpus,
     ledger_identity,
     make_workflow,
 )
@@ -29,7 +30,7 @@ async def test_workflow_run_persists_and_waits_at_human_gate(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
     events = await workflow.list_events(corpus.id, run.id)
@@ -103,7 +104,7 @@ async def test_workflow_corpus_isolation_and_same_corpus_concurrency(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     workflow = make_workflow(phase02)
     first, second = await _gather_runs(workflow, aurora.id)
@@ -139,7 +140,7 @@ async def test_idempotent_ledger_reuse_retry_and_ambiguous_window(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     adapter = CountingModelAdapter(fail_classify_attempts=2)
     workflow = make_workflow(phase02, adapter=adapter)
     run = await workflow.create_run(corpus.id)
@@ -296,7 +297,7 @@ async def test_model_failure_is_durable_and_resumable(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     adapter = _FailThenSucceedAdapter()
     workflow = make_workflow(phase02, adapter=adapter)
     failed = await workflow.create_run(corpus.id)
@@ -325,7 +326,7 @@ async def test_failed_examine_stage_is_not_recorded_as_completed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     create_examination = workflow.examine.create_run
 
@@ -354,7 +355,7 @@ async def test_resume_without_checkpoint_reinitializes_same_run(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     pending = await workflow._create_pending_run(corpus.id)
     async with phase02.session_factory() as session:

@@ -110,6 +110,18 @@ async def ingest_corpus(service: Phase02Service, corpus_dir: Path) -> Corpus:
     return corpus
 
 
+async def ensure_current_revision(phase02: Phase02Service, corpus_id: UUID) -> None:
+    """Make an ingested corpus workflow-runnable without completing human review."""
+
+    await make_incremental(phase02).ensure_initial_revision(corpus_id)
+
+
+async def ingest_workflow_corpus(service: Phase02Service, corpus_dir: Path) -> Corpus:
+    corpus = await ingest_corpus(service, corpus_dir)
+    await ensure_current_revision(service, corpus.id)
+    return corpus
+
+
 def make_understand(
     phase02: Phase02Service,
     adapter: ModelAdapter | None = None,

@@ -214,6 +214,53 @@ class IncrementalService:
                 await session.refresh(revision)
             return revision
 
+    async def ensure_initial_revision(self, corpus_id: UUID) -> CorpusRevision:
+        """Create the first current revision from ingested sources, or reuse it.
+
+        Understand and Examine run only when no current revision exists. They do
+        not invent a revision during a user-started workflow. Review is not
+        completed here; later workflow runs still stop at the human gate.
+        """
+
+        await self.phase02.get_corpus(corpus_id)
+        existing = await self._current_revision(corpus_id)
+        if existing is not None:
+            return existing
+        snapshots = await self._latest_snapshots(corpus_id)
+        if not snapshots:
+            raise ValidationError(
+                "corpus_has_no_sources",
+                "An initial durable revision requires ingested source versions.",
+                "Ingest at least one source, then bootstrap the initial revision.",
+            )
+        analysis = await self.understand.create_run(corpus_id)
+        if analysis.status != "completed":
+            raise ValidationError(
+                "analysis_run_not_ready",
+                "A baseline revision requires a completed Understand analysis run.",
+                "Correct the recorded Understand failure, then bootstrap the initial revision.",
+            )
+        examination = await self.examine.create_run(corpus_id, analysis.id)
+        if examination.status != "completed":
+            raise ValidationError(
+                "examination_run_not_ready",
+                "A baseline revision requires a completed Examine run.",
+                "Correct the recorded Examine failure, then bootstrap the initial revision.",
+            )
+        try:
+            return await self.create_baseline_revision(
+                corpus_id,
+                analysis_run_id=analysis.id,
+                examination_run_id=examination.id,
+            )
+        except ValidationError as error:
+            if error.code != "corpus_revision_exists":
+                raise
+            current = await self._current_revision(corpus_id)
+            if current is None:
+                raise
+            return current
+
     async def get_current_revision(self, corpus_id: UUID) -> CorpusRevision:
         await self.phase02.get_corpus(corpus_id)
         revision = await self._current_revision(corpus_id)

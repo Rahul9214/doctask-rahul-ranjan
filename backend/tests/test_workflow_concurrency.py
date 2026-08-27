@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from helpers import CountingModelAdapter, ingest_corpus, make_workflow
+from helpers import CountingModelAdapter, ingest_workflow_corpus, make_workflow
 from sqlalchemy import func, select
 
 from app.errors import ModelError
@@ -20,7 +20,7 @@ async def test_concurrent_resume_of_same_run_is_serialized(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     adapter = _ExclusiveSlowAdapter()
     first_service = make_workflow(phase02, adapter=adapter)
     second_service = make_workflow(phase02, adapter=adapter)
@@ -66,7 +66,7 @@ async def test_concurrent_failed_resume_resets_checkpoint_once(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     adapter = _ExclusiveFailThenSucceedAdapter()
     first_service = make_workflow(phase02, adapter=adapter)
     second_service = make_workflow(phase02, adapter=adapter)
@@ -111,7 +111,7 @@ async def test_concurrent_resume_of_waiting_run_does_not_bypass_review(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     first_service = make_workflow(phase02)
     second_service = make_workflow(phase02)
     run = await first_service.create_run(corpus.id)

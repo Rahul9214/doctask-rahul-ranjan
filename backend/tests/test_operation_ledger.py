@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from helpers import ingest_corpus, ledger_identity, make_workflow
+from helpers import ingest_workflow_corpus, ledger_identity, make_workflow
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -40,7 +40,7 @@ async def test_attempt_intent_is_persisted_before_provider_call(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
     ledger = OperationLedger(phase02.session_factory)
@@ -105,7 +105,7 @@ async def test_failed_call_retains_attempt_count_started_before_provider(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
     ledger = OperationLedger(phase02.session_factory)
@@ -154,7 +154,7 @@ async def test_uncertain_live_failure_through_ledger_is_ambiguous_and_not_retrie
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
     kinds = (
@@ -235,7 +235,7 @@ async def test_malformed_http_200_through_ledger_is_terminal_and_not_retried(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
     attempts = {"count": 0}
@@ -288,7 +288,7 @@ async def test_invalid_durable_operation_states_are_rejected(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    corpus = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    corpus = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     workflow = make_workflow(phase02)
     run = await workflow.create_run(corpus.id)
 

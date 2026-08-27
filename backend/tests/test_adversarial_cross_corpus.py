@@ -5,6 +5,7 @@ import pytest
 from helpers import (
     complete_required_review,
     ingest_corpus,
+    ingest_workflow_corpus,
     make_examine,
     make_incremental,
     make_review,
@@ -25,7 +26,7 @@ async def test_aurora_and_harbor_cross_corpus_access_fails_closed(
     corpus_fixtures: Path,
 ) -> None:
     phase02, _storage = phase02_service
-    aurora = await ingest_corpus(phase02, corpus_fixtures / "aurora-control-hub")
+    aurora = await ingest_workflow_corpus(phase02, corpus_fixtures / "aurora-control-hub")
     harbor = await ingest_corpus(phase02, corpus_fixtures / "harbor-ledger-modernization")
     aurora_workflow = make_workflow(phase02)
     harbor_review = make_review(phase02)
@@ -59,12 +60,7 @@ async def test_aurora_and_harbor_cross_corpus_access_fails_closed(
     incremental = make_incremental(phase02, review=aurora_workflow.review)
     await complete_required_review(aurora_workflow.review, aurora.id, aurora_run.review_session_id)
     await complete_required_review(harbor_review, harbor.id, harbor_session.id)
-    aurora_revision = await incremental.create_baseline_revision(
-        aurora.id,
-        analysis_run_id=aurora_run.analysis_run_id,
-        examination_run_id=aurora_run.examination_run_id,
-        review_session_id=aurora_run.review_session_id,
-    )
+    aurora_revision = await incremental.get_current_revision(aurora.id)
     harbor_incremental = make_incremental(phase02, review=harbor_review)
     harbor_revision = await harbor_incremental.create_baseline_revision(
         harbor.id,
