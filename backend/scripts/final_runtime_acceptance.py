@@ -71,7 +71,39 @@ def ingest_corpus(client: httpx.Client, corpus_dir: Path) -> dict[str, Any]:
             ),
             201,
         )
+    ensure_initial_revision(client, str(corpus["id"]))
     return corpus
+
+
+def ensure_initial_revision(client: httpx.Client, corpus_id: str) -> None:
+    current = client.get(f"/corpora/{corpus_id}/revisions/current")
+    if current.status_code == 200:
+        return
+    payload = current.json() if current.content else {}
+    if current.status_code != 404 or payload.get("code") != "corpus_revision_not_found":
+        raise SystemExit(
+            f"GET /corpora/{corpus_id}/revisions/current -> "
+            f"{current.status_code}: {current.text[:800]}"
+        )
+    analysis = _require(client.post(f"/corpora/{corpus_id}/analysis-runs"), 201)
+    if analysis.get("status") != "completed":
+        raise SystemExit(f"Understand failed while creating the initial revision: {analysis}")
+    examination = _require(
+        client.post(f"/corpora/{corpus_id}/analysis-runs/{analysis['id']}/examination-runs"),
+        201,
+    )
+    if examination.get("status") != "completed":
+        raise SystemExit(f"Examine failed while creating the initial revision: {examination}")
+    _require(
+        client.post(
+            f"/corpora/{corpus_id}/revisions",
+            json={
+                "analysis_run_id": analysis["id"],
+                "examination_run_id": examination["id"],
+            },
+        ),
+        201,
+    )
 
 
 def _validate_applied_semantics(

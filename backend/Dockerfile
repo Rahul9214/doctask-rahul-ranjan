@@ -21,6 +21,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY src ./src
+COPY fixtures ./fixtures
+COPY scripts ./scripts
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8000

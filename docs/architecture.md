@@ -372,7 +372,9 @@ pgvector assists retrieval recall. It is not evidence and cannot satisfy provena
 The implemented local/container adapter streams originals outside process memory, incorporates
 SHA-256 into generated version keys, uses a mounted named volume, and re-reads/reparses bytes for
 citation validation. Normalized blocks are stored in PostgreSQL rather than as duplicate filesystem
-artifacts. Object storage is not required for the acceptance target.
+artifacts. Object storage is not implemented. The only supported durable-bytes configuration is
+`SOURCE_STORAGE_PATH` on a persistent volume (Compose `source_files`). An ephemeral container
+filesystem will drop source objects while `source_versions.storage_key` rows remain.
 
 ### React assurance UI
 
@@ -470,7 +472,10 @@ Implemented in Phase 06:
   gate. Status is `pending`, `running`, `waiting_for_review`, `failed`, or `completed`. Current
   stage, attempt/resume counts, checkpoint thread id (equal to run id), linked analysis/
   examination/review ids, configuration/version identifiers, and failure cause/remedy are stored.
-  Failed is not waiting.
+  Failed is not waiting. Starting a workflow requires a current durable
+  `CorpusRevision`; a corpus that has sources but no current revision is rejected
+  before a run row is created. Resume remains run-specific and does not create a
+  missing corpus revision or bypass human review.
 - `DurableOperation`: idempotency ledger row keyed by SHA-256 of the canonical identity payload:
   workflow run id, stage, operation type, source-input version, canonical request hash, model
   provider, model name, taxonomy version, Understand graph/version, prompt/config version, and outer

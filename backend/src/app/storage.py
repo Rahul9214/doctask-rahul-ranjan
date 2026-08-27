@@ -91,6 +91,31 @@ class LocalFileStorage:
             ) from error
         return target
 
+    async def restore_missing(self, staged: StagedUpload, storage_key: str) -> Path:
+        """Write staged bytes to a recorded key only when that object is absent.
+
+        This never overwrites an existing object. Callers must treat a present
+        file whose SHA-256 does not match recorded metadata as tampering.
+        """
+
+        target = self.path_for_key(storage_key)
+        if target.exists():
+            raise StorageError(
+                "storage_collision",
+                "The generated immutable storage destination already exists.",
+                "Retry ingestion so a new version identifier is generated.",
+            )
+        await anyio.to_thread.run_sync(target.parent.mkdir, 0o755, True, True)
+        try:
+            await anyio.to_thread.run_sync(os.replace, staged.path, target)
+        except OSError as error:
+            raise StorageError(
+                "storage_write_failed",
+                "The uploaded file could not be promoted to durable storage.",
+                "Verify SOURCE_STORAGE_PATH is writable and retry.",
+            ) from error
+        return target
+
     def path_for_key(self, storage_key: str) -> Path:
         key = PurePosixPath(storage_key)
         if key.is_absolute() or not key.parts or any(part in {"", ".", ".."} for part in key.parts):

@@ -47,6 +47,29 @@ async def test_storage_streams_hashes_promotes_and_uses_generated_key(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_storage_restore_missing_writes_only_when_absent(tmp_path: Path) -> None:
+    storage = LocalFileStorage(tmp_path, max_upload_bytes=100)
+    first = await storage.stage(MemoryUpload(b"demo-bytes"))
+    key = storage.storage_key(
+        corpus_id=uuid4(),
+        source_id=uuid4(),
+        version_id=uuid4(),
+        sha256=first.sha256,
+        declared_format="txt",
+    )
+    target = await storage.restore_missing(first, key)
+    assert target.read_bytes() == b"demo-bytes"
+    assert await storage.sha256_for_key(key) == first.sha256
+
+    collision = await storage.stage(MemoryUpload(b"demo-bytes"))
+    with pytest.raises(StorageError) as raised:
+        await storage.restore_missing(collision, key)
+    assert raised.value.code == "storage_collision"
+    assert target.read_bytes() == b"demo-bytes"
+    await storage.remove_staged(collision)
+
+
+@pytest.mark.asyncio
 async def test_storage_cleans_partial_file_after_size_failure(tmp_path: Path) -> None:
     storage = LocalFileStorage(tmp_path, max_upload_bytes=4)
 

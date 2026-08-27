@@ -260,6 +260,18 @@ CI runs the same backend and frontend quality gates, including the process-kill,
 
 Both corpora and all eight fixture documents are synthetic demonstration data, not customer or real-project data. Fixtures live under [`backend/fixtures/corpora`](backend/fixtures/corpora).
 
+The intended demo fixture set is exactly those two corpora. Local databases can accumulate extra rows with the same names because tests and the UI create a new corpus UUID on each ingest; those extra rows are transient test records, not additional fixtures. The frontend corpus list is loaded from the API and is not hard-coded.
+
+A corpus is not workflow-runnable until it has a current durable revision. Ingesting sources does not create that revision. Use one idempotent bootstrap command to create missing demo corpora, ingest fixture sources without duplicating existing versions, create the initial current revision, skip already-correct corpora, and repair incomplete legacy demo corpora:
+
+```powershell
+uv run python scripts/bootstrap_demo_corpora.py
+```
+
+The same command is `python -m app.demo_bootstrap`. It can be rerun safely. It does not delete data, complete human review, or start a workflow run. If a canonical demo `SourceVersion` row exists but its filesystem object is missing, bootstrap rematerializes the fixture bytes onto the recorded storage key after verifying SHA-256. It does not overwrite bytes that are present but do not match the recorded hash, and it does not repair non-demo corpora.
+
+Source metadata lives in PostgreSQL. Immutable source bytes live on the local filesystem at `SOURCE_STORAGE_PATH`. Local Compose mounts a named volume at `/data/source-files`. There is no object-storage backend. A Railway service without a durable volume on that path will lose files on restart while database rows remain; that is a deployment persistence issue, not a reason to weaken ingest validation.
+
 ## Repository structure
 
 ```text

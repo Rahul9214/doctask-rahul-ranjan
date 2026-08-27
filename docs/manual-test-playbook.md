@@ -74,10 +74,26 @@ foreach ($upload in $uploads) {
     "$base/corpora/$($corpus.id)/sources"
 }
 Invoke-RestMethod "$base/corpora/$($corpus.id)/sources"
+
+$analysis = Invoke-RestMethod -Method Post -Uri "$base/corpora/$($corpus.id)/analysis-runs"
+$examination = Invoke-RestMethod -Method Post -Uri "$base/corpora/$($corpus.id)/analysis-runs/$($analysis.id)/examination-runs"
+Invoke-RestMethod -Method Post -Uri "$base/corpora/$($corpus.id)/revisions" -ContentType "application/json" -Body (@{
+  analysis_run_id = $analysis.id
+  examination_run_id = $examination.id
+} | ConvertTo-Json)
+Invoke-RestMethod "$base/corpora/$($corpus.id)/revisions/current"
 ```
 
-**Expected:** four logical sources with immutable source-version IDs and SHA-256 values.
-**Proves:** mixed-format bounded ingestion, document typing, immutable versioning, and corpus scope.
+**Expected:** four logical sources with immutable source-version IDs and SHA-256 values, then a current durable revision. A corpus is not workflow-runnable until that revision exists. Starting a workflow without it returns `corpus_revision_required` and does not create a failed run.
+
+For the two canonical demo corpora (`Aurora Control Hub` and `Harbor Ledger Modernization`), the idempotent alternative from `backend/` is:
+
+```powershell
+uv run python scripts/bootstrap_demo_corpora.py
+```
+
+That command creates missing demo corpora, ingests fixture sources without duplicates, creates the initial current revision, skips already-correct corpora, and repairs incomplete legacy demo corpora. It does not complete human review or start a workflow run.
+**Proves:** mixed-format bounded ingestion, document typing, immutable versioning, corpus scope, and the initial current revision required before Start workflow.
 
 ## E. Start the durable workflow
 
